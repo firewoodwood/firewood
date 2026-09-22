@@ -33,6 +33,9 @@ globalThis.__game = {
     startAI: () => startAI(),
     moveSnake: () => moveSnake(),
     gridCells: () => GRID_SIZE * GRID_SIZE,
+    // 测试专用：把绘制与效果推进换成空实现。绘制只是副作用，
+    // 不改变游戏状态，因此不会影响本脚本要验证的任何结论。
+    disableRender: () => { drawCanvas = function () {}; updateEffects = function () {}; },
     // 检查食物是否满足"有解"约束：从蛇头沿回路向前 1 ~ (L+1) 格内
     checkFoodSolvable: () => {
         const total = GRID_SIZE * GRID_SIZE;
@@ -53,9 +56,16 @@ globalThis.__game = {
 `;
 
 function makeElement() {
+    const classes = new Set();
     return {
         innerText: '', innerHTML: '', textContent: '', className: '', style: {},
         children: [],
+        classList: {
+            add(c) { classes.add(c); },
+            remove(c) { classes.delete(c); },
+            contains(c) { return classes.has(c); },
+            toggle(c) { if (classes.has(c)) { classes.delete(c); return false; } classes.add(c); return true; }
+        },
         appendChild(c) { this.children.push(c); return c; },
         removeChild() {},
         setAttribute() {},
@@ -77,8 +87,16 @@ const documentStub = {
     querySelector() { return makeElement(); }
 };
 
+// 渲染短路：moveSnake 每步都会调 drawCanvas，而绘制现在包含眼睛/粒子/
+// 渐变/阴影，在无头环境里纯属浪费（实测让 12 局从 ~100 秒涨到 10 分钟以上）。
+// 游戏逻辑完全不依赖绘制，所以把 ctx 的方法全部换成空实现。
+// 注意：这是**测试专属**的短路，不改动 index.html 一行代码；
+// 真实绘制由浏览器验证覆盖。
 const ctxStub = new Proxy({}, {
-    get(t, prop) { return prop in t ? t[prop] : () => {}; },
+    get(t, prop) {
+        if (prop in t) return t[prop];
+        return () => {};
+    },
     set(t, prop, v) { t[prop] = v; return true; }
 });
 
@@ -133,10 +151,23 @@ vm.runInContext(code + exportCode, sandbox, { filename: 'snake-page.js' });
 const game = sandbox.__game;
 GRID_CELLS = game.gridCells();
 
+// ---- 默认短路绘制，只验证游戏逻辑 ----
+// 原因：moveSnake 每步都会调一次 drawCanvas，而它在无头环境里要经过一层
+// JS 桩函数（真实浏览器有原生 canvas，不会这样）。实测单次 drawCanvas
+// 约 1.24ms、而 AI 决策只有 0.027ms —— 绘制占了 98% 的运行时间，
+// 12 局要跑十分钟以上。绘制是**纯副作用、不改变任何游戏状态**，
+// 跳过它不影响胜负、步数、食物有解性这些被验证的结论。
+// 真实绘制由浏览器验证负责。想连绘制一起测：设 VERIFY_RENDER=1
+const VERIFY_RENDER = process.env.VERIFY_RENDER === '1';
+if (!VERIFY_RENDER) {
+    game.disableRender();
+    console.log('（已短路绘制以加速；如需一并验证绘制，设环境变量 VERIFY_RENDER=1）\n');
+}
+
 // ---- 复刻页面的节奏，用来算"真实墙钟要跑多久" ----
 // 页面现在**不做**自动提速：每 tick 固定走 1 步，AI 模式间隔 AI_TICK_MS。
 // 测速规则若改了，这两个常量需要同步（index.html 里是 AI_TICK_INTERVAL）。
-const AI_TICK_MS = 60;
+const AI_TICK_MS = 70;
 let wallTicks = 0;        // 累计帧数（= 总步数）
 let ticksThisTrial = 0;   // 本局帧数
 

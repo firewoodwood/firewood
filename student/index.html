@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>林淮哲 · 个人主页</title>
+<meta name="description" content="林淮哲的个人主页 —— 广东工业大学 集成电路设计与集成系统专业 2026 级">
+<style>
+    /* ============================================================
+       两套配色：浅色为默认，深色由 [data-theme="dark"] 覆盖。
+       与贪吃蛇页面用的是同一套做法（CSS 自定义属性 + 根元素属性切换），
+       切换结果存 localStorage，刷新后保留。
+       ============================================================ */
+    :root {
+        --bg: #f4f6f9;
+        --surface: #ffffff;
+        --surface-2: #eef1f6;
+        --text: #1b2430;
+        --text-dim: #5a6673;
+        --border: #dde3ea;
+        --accent: #2f6fed;
+        --accent-soft: rgba(47, 111, 237, 0.12);
+        --shadow: 0 6px 24px rgba(20, 35, 60, 0.08);
+        --tag-bg: #eef1f6;
+        --tag-text: #34495e;
+    }
+
+    [data-theme="dark"] {
+        --bg: #12161c;
+        --surface: #1a2029;
+        --surface-2: #222a35;
+        --text: #e8ecf1;
+        --text-dim: #9aa7b6;
+        --border: #2b3542;
+        --accent: #57d98a;
+        --accent-soft: rgba(87, 217, 138, 0.14);
+        --shadow: 0 6px 28px rgba(0, 0, 0, 0.45);
+        --tag-bg: #222a35;
+        --tag-text: #c3ccd8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                     Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.75;
+        -webkit-font-smoothing: antialiased;
+        transition: background 0.3s ease, color 0.3s ease;
+        padding: 0 18px 60px;
+    }
+
+    .wrap { max-width: 760px; margin: 0 auto; }
+
+    /* ---------- 顶栏 ---------- */
+    .topbar {
+        display: flex;
+        justify-content: flex-end;
+        padding: 18px 0 0;
+    }
+    .theme-btn {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 16px;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s, transform 0.1s;
+    }
+    .theme-btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+    .theme-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    /* ---------- 头部 ---------- */
+    header.hero {
+        padding: 26px 0 34px;
+        border-bottom: 1px solid var(--border);
+    }
+    .avatar {
+        width: 82px; height: 82px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        color: var(--accent);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 32px; font-weight: 700;
+        border: 2px solid var(--accent);
+        margin-bottom: 18px;
+        user-select: none;
+    }
+    h1 {
+        font-size: 30px;
+        letter-spacing: 0.5px;
+        line-height: 1.3;
+    }
+    .subtitle {
+        color: var(--text-dim);
+        font-size: 15px;
+        margin-top: 8px;
+    }
+    .subtitle .sep { opacity: 0.5; margin: 0 8px; }
+
+    /* ---------- 通用区块 ---------- */
+    section { padding: 30px 0; border-bottom: 1px solid var(--border); }
+    section:last-of-type { border-bottom: none; }
+
+    h2 {
+        font-size: 17px;
+        letter-spacing: 1px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+    }
+    h2::before {
+        content: "";
+        width: 4px; height: 17px;
+        border-radius: 2px;
+        background: var(--accent);
+        display: inline-block;
+    }
+
+    p { color: var(--text); }
+    p + p { margin-top: 12px; }
+
+    /* ---------- 卡片网格 ---------- */
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+    }
+    .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px 18px 16px;
+        box-shadow: var(--shadow);
+        transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+    .card:hover { transform: translateY(-3px); border-color: var(--accent); }
+    .card h3 {
+        font-size: 15px;
+        margin-bottom: 6px;
+        display: flex; align-items: center; gap: 7px;
+    }
+    .card p { font-size: 14px; color: var(--text-dim); line-height: 1.65; }
+
+    /* ---------- 标签 ---------- */
+    .tags { display: flex; flex-wrap: wrap; gap: 9px; }
+    .tag {
+        background: var(--tag-bg);
+        color: var(--tag-text);
+        border-radius: 999px;
+        padding: 6px 15px;
+        font-size: 13.5px;
+    }
+
+    /* ---------- 链接列表 ---------- */
+    .links { display: flex; flex-direction: column; gap: 10px; }
+    .link-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 13px 16px;
+        color: var(--text);
+        text-decoration: none;
+        font-size: 14.5px;
+        transition: border-color 0.18s, transform 0.18s;
+    }
+    .link-row:hover { border-color: var(--accent); transform: translateX(3px); }
+    .link-row .label { color: var(--text-dim); min-width: 62px; }
+    .link-row .value { font-weight: 600; word-break: break-all; }
+    .link-row .icon { font-size: 17px; }
+
+    /* ---------- 项目展示 ---------- */
+    .project {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: 12px;
+        padding: 18px 20px;
+        box-shadow: var(--shadow);
+    }
+    .project h3 { font-size: 16px; margin-bottom: 8px; }
+    .project p { font-size: 14px; color: var(--text-dim); }
+    .project .actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .btn {
+        display: inline-block;
+        background: var(--accent);
+        color: #fff;
+        text-decoration: none;
+        border-radius: 8px;
+        padding: 9px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        transition: opacity 0.18s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn.ghost {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid var(--accent);
+    }
+    [data-theme="dark"] .btn { color: #10211a; }
+
+    footer {
+        padding-top: 30px;
+        color: var(--text-dim);
+        font-size: 13px;
+        text-align: center;
+        line-height: 1.9;
+    }
+
+    /* ---------- 小屏 ---------- */
+    @media (max-width: 520px) {
+        h1 { font-size: 24px; }
+        .avatar { width: 66px; height: 66px; font-size: 26px; }
+        section { padding: 24px 0; }
+        .link-row { font-size: 13.5px; padding: 11px 13px; }
+        .link-row .label { min-width: 52px; }
+    }
+
+    /* ---------- 降低动效偏好 ---------- */
+    @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; }
+    }
+
+    /* 打印时去掉阴影和背景，保证内容清楚 */
+    @media print {
+        body { background: #fff; color: #000; }
+        .theme-btn, .project .actions { display: none; }
+        .card, .link-row, .project { box-shadow: none; border-color: #ccc; }
+    }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+    <div class="topbar">
+        <button class="theme-btn" id="themeToggle" type="button" aria-label="切换深浅色主题">🌓 切换主题</button>
+    </div>
+
+    <!-- ==================== 头部：自我介绍 ==================== -->
+    <header class="hero">
+        <div class="avatar" aria-hidden="true">林</div>
+        <h1>林淮哲</h1>
+        <p class="subtitle">
+            广东工业大学
+            <span class="sep">·</span>
+            集成电路设计与集成系统 3 班
+            <span class="sep">·</span>
+            2026 级大一
+        </p>
+    </header>
+
+    <!-- ==================== 关于我 ==================== -->
+    <section>
+        <h2>关于我</h2>
+        <p>
+            我是广东工业大学集成电路设计与集成系统专业 3 班的大一新生。
+            目前正在打基础：一方面在学电路与半导体相关的基础课，
+            另一方面在熟悉 Git、命令行和 AI 编程工具，
+            试着把课上学的东西真正做成能跑起来的东西。
+        </p>
+        <p>
+            对芯片设计这条路线感兴趣，希望先从最基础的电路分析和数字逻辑开始，
+            一步一步把基础打扎实。
+        </p>
+    </section>
+
+    <!-- ==================== 兴趣爱好 ==================== -->
+    <section>
+        <h2>兴趣爱好</h2>
+        <div class="grid">
+            <div class="card">
+                <h3>📚 看书</h3>
+                <p>喜欢在课余时间读书，涉及面比较杂。读书让我能安静下来，也常常能给专业课带来一些别的角度。</p>
+            </div>
+            <div class="card">
+                <h3>🏃 跑步</h3>
+                <p>坚持跑步，跑完出一身汗的感觉很解压。跑步也让我明白一件事：进步靠的是持续，不是爆发。</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 技能 / 正在学 ==================== -->
+    <section>
+        <h2>正在学</h2>
+        <div class="tags">
+            <span class="tag">C 语言</span>
+            <span class="tag">电路分析基础</span>
+            <span class="tag">HTML / CSS / JavaScript</span>
+            <span class="tag">Git 与版本控制</span>
+            <span class="tag">命令行基础</span>
+            <span class="tag">AI 编程工具</span>
+        </div>
+    </section>
+
+    <!-- ==================== 作品 ==================== -->
+    <section>
+        <h2>作品</h2>
+        <div class="project">
+            <h3>🐍 贪吃蛇（AI 自动演示版）</h3>
+            <p>
+                纯前端单文件网页小游戏，双击就能玩。除了手动模式，
+                还带一个会自己玩的 AI：它沿一条预先算好的哈密顿回路前进，
+                能一路把整盘 400 格全部填满而一次都不撞死。
+                带暂停、结束本局、主题切换和最近 10 局的战绩记录。
+            </p>
+            <div class="actions">
+                <a class="btn" href="../index.html">试玩 →</a>
+                <a class="btn ghost" href="https://github.com/firewoodwood/firewood">看源码</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ==================== 联系方式 ==================== -->
+    <section>
+        <h2>联系方式</h2>
+        <div class="links">
+            <a class="link-row" href="mailto:h1095677991@163.com">
+                <span class="icon" aria-hidden="true">✉️</span>
+                <span class="label">邮箱</span>
+                <span class="value">h1095677991@163.com</span>
+            </a>
+            <a class="link-row" href="https://github.com/firewoodwood" target="_blank" rel="noopener">
+                <span class="icon" aria-hidden="true">🐙</span>
+                <span class="label">GitHub</span>
+                <span class="value">@firewoodwood</span>
+            </a>
+        </div>
+    </section>
+
+    <footer>
+        <div>广东工业大学 · 集成电路设计与集成系统</div>
+        <div>© <span id="year">2026</span> 林淮哲</div>
+    </footer>
+
+</div>
+
+<script>
+    // ============================================================
+    //  主题切换：与贪吃蛇页面同一套做法
+    //  —— 改根元素属性驱动 CSS 变量，选择写 localStorage，刷新后保留。
+    //  localStorage 在 file:// 或隐私模式下可能抛异常，全部包 try/catch，
+    //  最坏情况只是"主题不被记住"，不影响页面。
+    // ============================================================
+    var STORAGE_KEY = 'firewoodTheme';
+
+    function safeGet(k) {
+        try { return localStorage.getItem(k); } catch (e) { return null; }
+    }
+    function safeSet(k, v) {
+        try { localStorage.setItem(k, v); } catch (e) { /* 忽略 */ }
+    }
+
+    function applyTheme(theme) {
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+    }
+
+    // 首屏就套用已保存的主题，避免"先白闪一下再变暗"
+    var saved = safeGet(STORAGE_KEY);
+    if (!saved) {
+        // 没存过就跟随系统偏好
+        saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+            ? 'dark' : 'light';
+    }
+    applyTheme(saved);
+
+    document.getElementById('themeToggle').addEventListener('click', function () {
+        var now = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        var next = now === 'dark' ? 'light' : 'dark';
+        applyTheme(next);
+        safeSet(STORAGE_KEY, next);
+    });
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+</body>
+</html>

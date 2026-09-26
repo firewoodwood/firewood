@@ -240,6 +240,18 @@
             opacity: 0.5;
             color: var(--text-color);
         }
+        /* 返回个人主页的入口。
+           父元素 .hint 有 opacity:0.5，链接会被一起压淡，所以这里单独提到 1，
+           否则这个链接几乎看不见、不像能点的东西。 */
+        .hint a {
+            color: var(--btn-bg);
+            opacity: 1;
+            text-decoration: none;
+            border-bottom: 1px solid currentColor;
+            padding-bottom: 1px;
+            transition: color 0.2s;
+        }
+        .hint a:hover { color: var(--btn-hover); }
 
         @media (max-width: 980px) {
             .history-panel { width: 100%; max-width: 650px; }
@@ -284,7 +296,10 @@
             <div class="status-tip" id="statusTip">⬆️⬇️⬅️➡️ 方向键控制</div>
             <div class="ai-progress" id="aiProgress"></div>
         </div>
-        <div class="hint">最高分、主题、战绩均自动保存</div>
+        <div class="hint">
+            最高分、主题、战绩均自动保存 ·
+            <a href="student/index.html">返回个人主页</a>
+        </div>
     </div>
 
     <!-- 多局战绩：最近 10 局 -->

@@ -358,7 +358,6 @@
     // 用时间而不是帧数计算寿命，动画时长才不会随速度变化。
     let particles = [];              // 吃食物时炸开的小点
     let floaters = [];               // 上浮并淡出的文字，如 "+1"
-    let headPulse = 0;               // 吃到食物时蛇头的一次脉冲（0~1）
     let deathFlashUntil = 0;         // 死亡闪屏的截止时间戳
 
     // ---------- AI 状态 ----------
@@ -1044,11 +1043,6 @@
         }
 
         floaters = floaters.filter(f => now - f.born < EFFECT_FLOATER_LIFE);
-
-        if (headPulse > 0) {
-            const t = (now - headPulse) / 320;
-            headPulse = t >= 1 ? 0 : headPulse;
-        }
     }
 
     function spawnEatEffects(cx, cy) {
@@ -1065,7 +1059,6 @@
             });
         }
         floaters.push({ x: cx, y: cy, text: '+1', born: now, color: '#2ecc71' });
-        headPulse = now;
     }
 
     function spawnDeathEffect() {
@@ -1075,7 +1068,6 @@
     function effectsReset() {
         particles = [];
         floaters = [];
-        headPulse = 0;
         deathFlashUntil = 0;
     }
 
@@ -1122,7 +1114,17 @@
         ctx.arc(foodCx - cellSize * 0.11, foodCy - cellSize * 0.11, cellSize * 0.11, 0, 2 * Math.PI);
         ctx.fill();
 
-        // ---------- 蛇身：从尾到头渐亮，身体越靠近头越醒目 ----------
+        // ---------- 蛇身与蛇头共用同一个颜色公式 ----------
+        // 身体从尾到头渐亮；蛇头用与"紧邻头的那一节"完全相同的颜色，
+        // 不再单独调亮 —— 否则头会显得比身体浅、像贴上去的。
+        // 蛇头的辨识度改由**眼睛**承担（见下），不靠变浅或变大。
+        function bodyColor(t, dark) {
+            const shade = Math.round(150 + 40 * t);
+            return dark
+                ? 'rgb(' + Math.round(20 + 10 * t) + ',' + shade + ',' + Math.round(140 + 20 * t) + ')'
+                : 'rgb(' + Math.round(28 + 12 * t) + ',' + shade + ',' + Math.round(80 + 25 * t) + ')';
+        }
+
         const len = snake.length;
         for (let i = len - 1; i >= 1; i--) {
             const seg = snake[i];
@@ -1130,10 +1132,7 @@
             const y = seg.y * cellSize;
             // t: 0(尾) → 1(紧邻头)
             const t = len > 1 ? 1 - i / (len - 1) : 1;
-            const shade = Math.round(150 + 40 * t);
-            ctx.fillStyle = isDark
-                ? 'rgb(' + Math.round(20 + 10 * t) + ',' + shade + ',' + Math.round(140 + 20 * t) + ')'
-                : 'rgb(' + Math.round(28 + 12 * t) + ',' + shade + ',' + Math.round(80 + 25 * t) + ')';
+            ctx.fillStyle = bodyColor(t, isDark);
             ctx.shadowColor = isDark ? '#1abc9c' : '#27ae60';
             ctx.shadowBlur = i < 3 ? 7 : 3;
             ctx.beginPath();
@@ -1142,24 +1141,18 @@
         }
         ctx.shadowBlur = 0;
 
-        // ---------- 蛇头：刻意做得和身体明显不同 ----------
-        //  1) 比身体大一圈（圆角半径更小、几乎占满格子）
-        //  2) 更亮的绿色 + 强光晕，吃到食物时还会脉冲放大
-        //  3) 画两只朝行进方向的眼睛，方向一眼可辨
+        // ---------- 蛇头 ----------
+        // 与身体的区别只有两点：同样的尺寸（不放大）、同样的颜色（不调浅），
+        // 加上较强光晕与两只朝行进方向的眼睛。
         const head = snake[0];
         const hx = head.x * cellSize;
         const hy = head.y * cellSize;
-        let grow = 0;
-        if (headPulse > 0) {
-            grow = (1 - (now - headPulse) / 320) * cellSize * 0.16;
-        }
 
-        ctx.fillStyle = '#39e07b';
+        ctx.fillStyle = bodyColor(1, isDark);
         ctx.shadowColor = '#2ecc71';
-        ctx.shadowBlur = 16 + grow;
+        ctx.shadowBlur = 16;
         ctx.beginPath();
-        roundRectPath(ctx, hx + 0.5 - grow / 2, hy + 0.5 - grow / 2,
-                      cellSize - 1 + grow, cellSize - 1 + grow, 5);
+        roundRectPath(ctx, hx + 2.5, hy + 2.5, cellSize - 5, cellSize - 5, 4);
         ctx.fill();
         ctx.shadowBlur = 0;
 

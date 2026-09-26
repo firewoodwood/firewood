@@ -45,7 +45,6 @@
 │   └── 林淮哲-个人简介.pdf      #   成品 PDF（单页）
 └── circuits/                   # 进阶挑战：三个电路的 PySpice 仿真
     ├── README.md               #   电路部分的完整说明与「手算 vs 仿真」对比表
-    ├── run_all.py              #   一键跑完三个电路
     ├── plot_setup.py           #   出图统一配置（中文字体 / Agg 后端）
     ├── circuit1_rc_lowpass.py  #   电路① RC 低通滤波
     ├── circuit2_thevenin.py    #   电路② 验证戴维南定理
@@ -401,7 +400,16 @@ node tools-verify-controls.js
 
 进阶挑战我选的是**电路**这一项。三个电路的完整内容（电路图、手算推导、仿真设置、对比表、踩坑记录）在 **[`circuits/README.md`](circuits/README.md)**，这里只放结论。
 
-**环境**：机器上已有 Python 3.13.14 + PySpice 1.5 + 随包自带的 ngspice-34.dll，无需额外安装。一键复跑：`cd circuits && python run_all.py`。
+**环境**：机器上已有 Python 3.13.14 + PySpice 1.5 + 随包自带的 ngspice-34.dll，无需额外安装。三个电路各自独立运行：
+
+```bash
+cd circuits
+python circuit1_rc_lowpass.py    # 电路① RC 低通滤波
+python circuit2_thevenin.py      # 电路② 验证戴维南定理
+python circuit3_mosfet_cs.py     # 电路③ NMOS 共源级放大
+```
+
+（Windows 下若控制台中文乱码，先设 `PYTHONIOENCODING=utf-8`。）
 
 | 电路 | 核心结论 | 手算 vs 仿真 |
 | --- | --- | --- |
@@ -420,7 +428,7 @@ node tools-verify-controls.js
 - **`100 @ u_F` 生成的是 100 法拉而不是 100 微法**，耦合电容成了短路，增益系统性偏大。把网表打出来看才发现。
 - **ngspice 的 level-1 模型在 AC 分析里不计 λ**（把 λ 从 0 扫到 0.5 增益一点不变）。我没有掩盖这一点，而是并了一只显式电阻代表 ro，脚本里同时打印两种结果并说明差异来源。
 
-> 任务书第二节要求的个人简介 PDF 本次未做；个人网站已完成，见 [`student/`](student/)。
+> 任务书第二节要求的个人简介 PDF 与个人网站均已完成，分别在 [`profile/`](profile/) 与 [`student/`](student/)。
 
 ## 六、个人网站
 

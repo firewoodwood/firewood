@@ -42,14 +42,14 @@
 | Ngspice | 随 PySpice 一起打包的 `ngspice-34.dll` |
 | numpy / scipy / matplotlib | 2.5.3 / 1.18.1 / 3.11.1 |
 
-一键跑完三个电路：
+三个电路各自独立运行：
 
 ```bash
 cd circuits
-python run_all.py
+python circuit1_rc_lowpass.py    # 电路① RC 低通滤波
+python circuit2_thevenin.py      # 电路② 验证戴维南定理
+python circuit3_mosfet_cs.py     # 电路③ NMOS 共源级放大
 ```
-
-也可以单独跑某个电路，例如 `python circuit3_mosfet_cs.py`。
 
 **关于中文显示**：`plot_setup.py` 会自动挑选系统中文字体（本机命中 `Microsoft YaHei`），并强制使用 `Agg` 后端（这台机器没有图形界面，不设的话会卡住）。脚本会在开头打印一行 `中文字体: xxx`，方便确认图上中文没变成方框。
 
@@ -62,7 +62,6 @@ python run_all.py
 ```
 circuits/
 ├── README.md                     # 本文件（三个电路的说明与对比表）
-├── run_all.py                    # 一键跑完三个电路
 ├── plot_setup.py                 # 出图统一配置（中文字体 / Agg 后端 / 风格）
 ├── circuit1_rc_lowpass.py        # 电路① RC 低通滤波
 ├── circuit2_thevenin.py          # 电路② 验证戴维南定理

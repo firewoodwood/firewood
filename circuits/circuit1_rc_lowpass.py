@@ -31,7 +31,7 @@ import PySpice.Logging.Logging as Logging
 Logging.setup_logging(logging_level='ERROR')
 
 from PySpice.Spice.Netlist import Circuit
-from PySpice.Unit import u_F, u_Hz, u_Ohm, u_s, u_V
+from PySpice.Unit import u_F, u_Hz, u_Ohm
 
 # ----------------------------------------------------------------------------
 # 元件参数与手算理论值

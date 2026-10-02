@@ -253,6 +253,31 @@
         }
         .hint a:hover { color: var(--btn-hover); }
 
+        /* ========== 胜利后的操作区 ==========
+           展示内容（奖杯、得分、蛇长、步数）画在画布的胜利界面上，
+           这里只放两个按钮：玩家要能自己选"继续玩"还是"重新开始"。
+           用真实按钮而不是画在 canvas 上，键盘和读屏才都能用。 */
+        .win-banner {
+            display: none;              /* 默认隐藏，达标时由 JS 显示 */
+            margin-top: 16px;
+            padding: 12px 18px;
+            border-radius: 16px;
+            border: 2px solid #f1c40f;
+            background: rgba(241, 196, 15, 0.14);
+        }
+        .win-banner.show { display: block; }
+        .win-banner .win-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-continue {
+            background: #2ecc71;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.35);
+        }
+        .btn-continue:hover { background: #27ae60; }
+
         @media (max-width: 980px) {
             .history-panel { width: 100%; max-width: 650px; }
             .history-list { max-height: 200px; }
@@ -301,6 +326,14 @@
             <a href="../student/index.html">返回个人主页</a> ·
             <a href="../index.html">返回首页</a>
         </div>
+
+        <!-- 胜利后的操作区：展示内容画在画布上，这里只放两个按钮 -->
+        <div class="win-banner" id="winBanner" role="status" aria-live="polite">
+            <div class="win-actions">
+                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 继续玩</button>
+                <button class="btn" id="restartFromWinBtn" type="button">🔄 重新开始</button>
+            </div>
+        </div>
     </div>
 
     <!-- 多局战绩：最近 10 局 -->
@@ -323,6 +356,9 @@
     // 代价是铺满全盘要 2 万步左右，一局约 23 分钟——想快就调小这个值，
     // 想更慢就调大（值越小越快）。用「暂停 / 结束本局」可随时中断长局。
     const AI_TICK_INTERVAL = 70;
+    // 胜利分数：首次达到这个分数时弹出胜利界面，由玩家决定继续还是重开。
+    // 只触发一次（重开或换局才复位），否则每吃一个食物都会再弹一次，很烦。
+    const WIN_SCORE = 15;
     const HISTORY_MAX = 10;             // 战绩最多保留局数
     const EFFECT_PARTICLE_LIFE = 620;   // 粒子寿命(ms)
     const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
@@ -334,6 +370,7 @@
     const highScoreSpan = document.getElementById('highScoreDisplay');
     const statusTip = document.getElementById('statusTip');
     const aiProgress = document.getElementById('aiProgress');
+    const winBanner = document.getElementById('winBanner');
     const historyList = document.getElementById('historyList');
     const historyEmpty = document.getElementById('historyEmpty');
     const pauseBtn = document.getElementById('pauseBtn');
@@ -344,6 +381,7 @@
     let direction = 'right';
     let nextDirection = 'right';
     let score = 0;
+    let stepCount = 0;               // 本局走过的步数，胜利界面展示
     let highScore = 0;
     let gameOver = false;
     let winFlag = false;
@@ -364,6 +402,18 @@
     let aiMode = false;              // 当前是否由 AI 接管
     let aiResult = null;             // null | 'fail' | 'full'
     let foodEatenCount = 0;          // AI 本局累计吃到几个食物
+
+    // ---------- 达标状态 ----------
+    let winShown = false;            // 本局是否已经弹过达标界面（每局只弹一次）
+    let winScreenVisible = false;    // 胜利界面此刻是否显示在画面上
+    let winPausedByBanner = false;   // 界面是不是把游戏停住了（用于"继续玩"时恢复）
+
+    // ---------- 开局提示界面 ----------
+    // 含义反过来写更省事：roundPending 为 true 表示"这一局还没开始，
+    // 正停在开局提示上"——不推进逻辑、不接受转向，画面由 drawCanvas
+    // 画出提示层。按空格或点画面才开始。只有"开一局手动游戏"会置 true，
+    // AI 演示与旧的一局结束都不经过它，避免挡住已有流程。
+    let roundPending = false;
 
     // ---------- 战绩 / 主题 ----------
     let roundHistory = [];
@@ -399,16 +449,20 @@
     function initGame() {
         // 初始蛇形必须落在回路上、且"蛇头在回路序号的最后"、方向与回路一致，
         // 否则 AI 一旦接管就可能出现蛇头前方的回路格被自己身体占用。
-        // 回路 route[0]=(0,0) → route[1]=(1,0) → route[2]=(2,0)，
-        // 因此取蛇头 (5,0)、身体 (4,0)(3,0)、方向 right，天然吻合。
+        //
+        // 现在取回路上下标 368 处的一段：route[368]=(9,9), route[367]=(9,10),
+        // route[366]=(10,10)，恰好贴着棋盘正中心（20×20 的中心是 9.5,9.5，
+        // 这三格距中心都是 1 格），方向 up 与回路走向一致。
+        // 这段是用 _center.js 在回路上按"距中心最近"筛出来的，不是手挑的。
         snake = [
-            { x: 5, y: 0 },
-            { x: 4, y: 0 },
-            { x: 3, y: 0 }
+            { x: 9, y: 9 },
+            { x: 9, y: 10 },
+            { x: 10, y: 10 }
         ];
-        direction = 'right';
-        nextDirection = 'right';
+        direction = 'up';
+        nextDirection = 'up';
         score = 0;
+        stepCount = 0;
         gameOver = false;
         winFlag = false;
         aiMode = false;
@@ -416,6 +470,11 @@
         foodEatenCount = 0;
         paused = false;
         endReason = null;
+        // 达标界面随新一局复位
+        winShown = false;
+        winScreenVisible = false;
+        winPausedByBanner = false;
+        hideWinBanner();
         effectsReset();
         buildCycleRoute();
         aiProgress.innerText = '';
@@ -429,10 +488,14 @@
         drawCanvas();
     }
 
+    /**
+     * 重置到一局干净的对局，但**不启动游戏循环**。
+     * 循环由 beginRound() 负责 —— 现在每局都要先停在开局提示上，
+     * 所以这里如果顺手 startLoop()，就会在玩家还没看清目标时蛇已经在动了。
+     */
     function resetGame() {
         stopLoop();
         initGame();
-        startLoop();
         statusTip.innerText = '🔄 新的一局！';
     }
 
@@ -530,6 +593,7 @@
         snake.unshift(newHead);
         if (!isEating) snake.pop();
         direction = moveDir;
+        stepCount++;          // 每成功走一步就记一次（死亡那一步不计，因为提前 return 了）
 
         // ---- 处理食物 ----
         if (isEating) {
@@ -539,11 +603,16 @@
                 safeSet('snakeHighScore', String(highScore));
             }
             updateScoreDisplay();
-            // 反馈：在食物原位置炸开小点、浮出「+1」，并让蛇头脉冲一下
+            // 反馈：在食物原位置炸开小点、浮出「+1」
             spawnEatEffects(
                 food.x * cellSize + cellSize / 2,
                 food.y * cellSize + cellSize / 2
             );
+
+            // 达标检查：首次到 15 分会弹出胜利界面，停住等玩家选"继续玩 / 重新开始"。
+            // 放在生成新食物之前——界面期间不需要新食物，避免它一闪而过。
+            checkWinScore();
+            if (paused) { drawCanvas(); return; }
 
             if (aiMode) {
                 foodEatenCount++;
@@ -552,12 +621,12 @@
             }
 
             // 终局：蛇身铺满全部格子，再没有空格可放食物。
-            // 这不是"胜利条件"，而是这局自然走到了终点——除去这个物理上限，
-            // 游戏本身没有目标分数、没有回合数限制，可以一直玩。
-            // 结束后按「重新开始 / AI自动玩」即可无限制地开下一局。
+            // 这**不是胜利条件**（胜利是拿到 WIN_SCORE 分那条路径），
+            // 而是棋盘物理上装不下了，这局自然到头。
             if (snake.length >= totalCells || !generateFood()) {
                 endGame('蛇身铺满全部 ' + totalCells + ' 格，这局到头了' +
-                        (aiMode ? '（全程零人工操作）' : '') + '。点「重新开始」继续玩', 'full');
+                        (aiMode ? '（全程零人工操作）' : '') +
+                        '。点「重新开始」再来一局', 'full');
                 return;
             }
             if (gameOver) { drawCanvas(); return; }
@@ -917,8 +986,8 @@
     //  result 取值：
     //    'fail' —— 撞墙 / 咬到自己，这局输了
     //    'full' —— 蛇身铺满全盘，没有空格可放食物，这局自然到头（不是失败）
-    //  游戏本身没有目标分数、没有回合限制，所以除铺满外的任何时刻都可以
-    //  一直玩下去；结束后按「重新开始 / AI自动玩」即可无限开新局。
+    //  result 与胜利无关：拿满 WIN_SCORE 分由 checkWinScore 单独处理，
+    //  不会走到这里。所以这里的「失败」只包括撞墙与被自己咬到两种。
     // ================================================================
     function endGame(message, result) {
         if (gameOver) return;
@@ -1027,7 +1096,7 @@
     //  反馈效果：推进与生成
     // ----------------------------------------------------------------
     //  设计原则：只做"看得懂发生了什么"的最小集合，不加背景音、不加弹窗。
-    //    · 吃到食物 → 食物位置炸开小点 + 上浮「+1」+ 蛇头一次脉冲
+    //    · 吃到食物 → 食物位置炸开小点 + 上浮「+1」
     //    · 蛇死亡   → 整屏红色闪一下
     //    · 暂停     → 画面盖一层并写明"已暂停"
     //  这些都是纯视觉对象，过期自动丢弃，不影响任何游戏逻辑。
@@ -1079,6 +1148,12 @@
         const cellSize = canvas.width / size;
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         const now = Date.now();
+
+        // 蛇还没初始化时直接返回。
+        // 这不是可有可无的保险：applyTheme() 内部会调 drawCanvas()，而启动流程里
+        // applyTheme 曾经排在 initGame 之前，于是 snake 还是空数组就去读 snake[0].x，
+        // 抛 TypeError 把 bootstrap 整个打断 —— 表现为"首屏有食物但没有蛇、也不能玩"。
+        if (!snake.length) return;
 
         ctx.fillStyle = isDark ? '#1a1a2e' : '#f8f9fa';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1199,7 +1274,9 @@
         }
 
         // ---------- 暂停覆盖层 ----------
-        if (paused && !gameOver) {
+        // 胜利界面造成的暂停不画这一层：胜利界面本身就在提示玩家，
+        // 再叠一句"按空格或点「继续」恢复"会和它上面那两个按钮互相打架。
+        if (paused && !gameOver && !winPausedByBanner) {
             ctx.fillStyle = 'rgba(0,0,0,0.45)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#ffffff';
@@ -1213,6 +1290,100 @@
             ctx.globalAlpha = 0.85;
             ctx.fillText('按空格或点「继续」恢复', canvas.width / 2, canvas.height / 2 + 42);
             ctx.globalAlpha = 1;
+        }
+
+        // ---------- 开局提示层 ----------
+        // 每局开始先停在这一屏，把"目标是什么、怎么操作"讲清楚再开始。
+        // 期间游戏逻辑不推进（roundPending 时不排 tick），所以这一层是静止的。
+        if (roundPending && !gameOver) {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+
+            // 半透明底 + 一层柔和的浅绿，和结束覆盖层的红/深色区分开
+            ctx.fillStyle = isDark ? 'rgba(10, 20, 16, 0.86)' : 'rgba(240, 250, 244, 0.94)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 标题
+            ctx.fillStyle = isDark ? '#e8f5ec' : '#12351f';
+            ctx.font = 'bold 26px "Segoe UI", sans-serif';
+            ctx.fillText('🎯 本局目标', cx, H / 2 - 96);
+
+            // 目标分数：这是整屏的重点，所以字号最大、用强调色
+            ctx.fillStyle = isDark ? '#57d98a' : '#1e8f4e';
+            ctx.font = 'bold 54px "Segoe UI", sans-serif';
+            ctx.fillText(WIN_SCORE + ' 分', cx, H / 2 - 40);
+
+            ctx.fillStyle = isDark ? '#b9c8bf' : '#3d5b4a';
+            ctx.font = '15px "Segoe UI", sans-serif';
+            ctx.fillText('吃到 ' + WIN_SCORE + ' 个食物就算赢', cx, H / 2 + 14);
+
+            // 操作说明
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.fillText('⬆️ ⬇️ ⬅️ ➡️  方向键移动', cx, H / 2 + 52);
+            ctx.fillText('空格键随时暂停 / 继续', cx, H / 2 + 76);
+
+            // 开始提示：带一点呼吸感，提示"这里可以点"
+            const breathe = 0.72 + 0.28 * Math.abs(Math.sin(now / 420));
+            ctx.globalAlpha = breathe;
+            ctx.fillStyle = isDark ? '#57d98a' : '#1e8f4e';
+            ctx.font = 'bold 17px "Segoe UI", sans-serif';
+            ctx.fillText('按空格键或点这里开始', cx, H / 2 + 126);
+            ctx.globalAlpha = 1;
+        }
+
+        // ---------- 胜利界面 ----------
+        // 达标时整屏庆祝，而不是只在画面下面露一条横幅 —— 横幅太容易被
+        // 当成普通提示忽略掉。这里只画展示内容，两个操作按钮留在 DOM 上
+        // （画在 canvas 里就得自己算点击命中，键盘和读屏也用不了）。
+        if (winScreenVisible && !gameOver) {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+
+            // 金色半透明底：和开局提示的浅绿、结束覆盖层的红/深色区分开
+            ctx.fillStyle = isDark ? 'rgba(30, 26, 8, 0.90)' : 'rgba(255, 250, 235, 0.95)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 奖杯：轻微呼吸，别死板
+            const breathe = 1 + 0.07 * Math.sin(now / 300);
+            ctx.save();
+            ctx.translate(cx, H / 2 - 104);
+            ctx.scale(breathe, breathe);
+            ctx.font = '52px "Segoe UI", sans-serif';
+            ctx.fillText('🏆', 0, 0);
+            ctx.restore();
+
+            ctx.fillStyle = isDark ? '#ffd977' : '#b8860b';
+            ctx.font = 'bold 34px "Segoe UI", sans-serif';
+            ctx.fillText('胜利！', cx, H / 2 - 44);
+
+            ctx.fillStyle = isDark ? '#7fe3a4' : '#1e8f4e';
+            ctx.font = 'bold 20px "Segoe UI", sans-serif';
+            ctx.fillText('吃到了 ' + WIN_SCORE + ' 个食物', cx, H / 2 + 4);
+
+            // 三个小统计：横向排开，比堆成三行更好读
+            const stats = [
+                ['得分', String(score)],
+                ['蛇长', String(snake.length)],
+                ['步数', String(stepCount)]
+            ];
+            const gap = W / 3;
+            stats.forEach(function (s, i) {
+                const sx = gap * i + gap / 2;
+                ctx.fillStyle = isDark ? '#ffe9a8' : '#8a6d1f';
+                ctx.font = 'bold 22px "Segoe UI", sans-serif';
+                ctx.fillText(s[1], sx, H / 2 + 58);
+                ctx.fillStyle = isDark ? '#a99b73' : '#9c8c66';
+                ctx.font = '13px "Segoe UI", sans-serif';
+                ctx.fillText(s[0], sx, H / 2 + 84);
+            });
+
+            ctx.fillStyle = isDark ? '#c9bb92' : '#7d6f4d';
+            ctx.font = '15px "Segoe UI", sans-serif';
+            ctx.fillText('要继续玩下去，还是重新开一局？', cx, H / 2 + 128);
         }
 
         // ---------- 结束覆盖层 ----------
@@ -1282,6 +1453,110 @@
     function clearStatus() {
         statusTip.innerText = '⬆️⬇️⬅️➡️ 方向键控制';
         aiProgress.innerText = '';
+    }
+
+    // ================================================================
+    //  开局提示界面
+    // ----------------------------------------------------------------
+    //  每局开始先停在提示屏上，讲清目标再开始。刻意做成"画面上的提示层 +
+    //  空格/点击开始"，而不是弹一个自动消失的 toast：玩家不会因为没看清
+    //  而错过目标，也不会在还没准备好时蛇就已经在动了。
+    // ================================================================
+    function showRoundPrompt() {
+        hideWinBanner();
+        stopLoop();               // 提示期间不排 tick，画面静止
+        roundPending = true;
+        paused = false;           // 提示≠暂停，避免暂停按钮显示成"继续"
+        updatePauseButton();
+        clearStatus();
+        drawCanvas();
+        statusTip.innerText = '🎯 目标是吃到 ' + WIN_SCORE + ' 分 —— 按空格或点画面开始';
+    }
+
+    function beginRound() {
+        if (!roundPending) return;
+        roundPending = false;
+        startLoop();
+        clearStatus();
+        drawCanvas();
+    }
+
+    /** 重置并停在开局提示上（「重新开始」与开局走这条路）。 */
+    function startNewRoundWithPrompt() {
+        resetGame();
+        showRoundPrompt();
+    }
+
+    // ================================================================
+    //  达标（拿到 WIN_SCORE 分）
+    // ----------------------------------------------------------------
+    //  达到 WIN_SCORE 时**不自动结算**，而是弹出胜利界面让玩家自己决定：
+    //    · 继续玩 —— 分数与蛇原样保留，接着玩下去（界面不再重复弹）
+    //    · 重新开始 —— 回到开局提示，开新一局
+    //  界面出现时把游戏停住（复用暂停那套 stopLoop），否则玩家还没看完
+    //  说明，蛇就已经撞死了。
+    // ================================================================
+    function showWinBanner() {
+        // 展示内容（奖杯、得分、蛇长、步数）画在画布的胜利界面上，
+        // 这里只负责让那两个操作按钮出现。
+        // winScreenVisible 与 winShown 是两件事：后者是"本局已弹过"，
+        // 会一直保持 true；前者是"此刻正在显示"，点「继续玩」后要关掉，
+        // 否则胜利界面会一直盖在画面上。
+        winScreenVisible = true;
+        winBanner.classList.add('show');
+
+        // 清掉吃食物留下的粒子与「+1」上浮文字：它们会飘在胜利界面上面，
+        // 像多余的残影（实测奖杯上会叠一个 +1）。
+        particles = [];
+        floaters = [];
+
+        // 停住游戏，等玩家选择。记下"是它停的"，这样"继续玩"之后
+        // 不会把用户自己按下的暂停给解开。
+        if (!gameOver && !paused) {
+            paused = true;
+            winPausedByBanner = true;
+            stopLoop();
+            updatePauseButton();
+        }
+        // 无论是否新暂停，都重绘一次 —— winShown 已置位，胜利界面才会画出来
+        drawCanvas();
+    }
+
+    function hideWinBanner() {
+        winScreenVisible = false;
+        winBanner.classList.remove('show');
+    }
+
+    /**
+     * 吃到一个食物后调用：首次达到 WIN_SCORE 就弹胜利界面。
+     * 只在 aiMode 为假时弹 —— AI 演示是要一路填满全盘的，
+     * 中途停下来等点击会打断演示。
+     */
+    function checkWinScore() {
+        if (winShown) return;
+        if (score < WIN_SCORE) return;
+        winShown = true;
+        if (aiMode) return;          // AI 演示不打断
+        if (roundPending) return;    // 还没开始就不可能达标，纯属防御
+        showWinBanner();
+    }
+
+    function continuePlaying() {
+        hideWinBanner();
+        if (winPausedByBanner) {
+            winPausedByBanner = false;
+            paused = false;
+            updatePauseButton();
+            startLoop();
+        }
+        statusTip.innerText = '▶️ 继续游戏，看看还能拿多少分';
+        drawCanvas();
+    }
+
+    function restartFromBanner() {
+        hideWinBanner();
+        winPausedByBanner = false;
+        startNewRoundWithPrompt();   // 同样先停在开局提示上
     }
 
     // ================================================================
@@ -1390,6 +1665,11 @@
         // AI 跑起来之后更需要能随时按下暂停。
         if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
             e.preventDefault();
+            // 开局提示期间，空格的含义是"开始"而不是"暂停"
+            if (roundPending) {
+                if (!e.repeat) beginRound();
+                return;
+            }
             if (!e.repeat) togglePause();   // 按住不放只触发一次
             return;
         }
@@ -1398,6 +1678,7 @@
             e.preventDefault();
         }
         if (gameOver || aiMode) return;   // AI 接管或已结束时忽略方向键
+        if (roundPending) return;         // 还没开始，转向没有意义
         // 暂停时不接受转向：否则恢复后会看到一个"多出来"的转向
         if (paused) return;
 
@@ -1410,6 +1691,15 @@
         }
     });
 
+    // 开局提示上写着"点这里开始"，所以点画面也要能开始
+    canvas.addEventListener('click', () => {
+        if (roundPending) beginRound();
+    });
+    // 提示层是"点画面开始"，给鼠标用户一个明确的可点光标
+    canvas.addEventListener('mousemove', () => {
+        canvas.style.cursor = roundPending ? 'pointer' : 'default';
+    });
+
     // ================================================================
     //  AI 按钮逻辑
     // ================================================================
@@ -1417,6 +1707,7 @@
         if (aiMode) return;
         // 开一局干净的，然后交给 AI（initGame 已把 paused 复位并刷新按钮）
         initGame();
+        roundPending = false;      // AI 演示不经过开局提示，直接跑
         aiMode = true;
         aiResult = null;
         foodEatenCount = 0;
@@ -1439,6 +1730,15 @@
         finishRound();
     });
 
+    // 胜利界面上的两个选择
+    document.getElementById('continueBtn').addEventListener('click', () => {
+        continuePlaying();
+    });
+
+    document.getElementById('restartFromWinBtn').addEventListener('click', () => {
+        restartFromBanner();
+    });
+
     // ================================================================
     //  主题切换（新增功能之一：至少 2 套配色，切换即时生效，刷新保留）
     // ================================================================
@@ -1450,7 +1750,10 @@
         } else {
             document.documentElement.removeAttribute('data-theme');
         }
-        drawCanvas();
+        // 启动时 applyTheme 会在 initGame 之前被调用，那时 snake 还是空的。
+        // drawCanvas 本身已经能安全返回，这里再判一次是为了把意图写明白：
+        // 设置主题不必强制重绘，真正需要重绘的是"用户点主题按钮"这条路径。
+        if (snake.length) drawCanvas();
     }
 
     document.getElementById('themeToggle').addEventListener('click', () => {
@@ -1461,7 +1764,7 @@
     //  重启按钮
     // ================================================================
     document.getElementById('restartBtn').addEventListener('click', () => {
-        resetGame();
+        startNewRoundWithPrompt();
     });
 
     // ================================================================
@@ -1474,12 +1777,21 @@
         loadHistory();
         renderHistory();
 
+        // 顺序要紧：先 applyTheme 把 data-theme 属性设好（它内部不再重绘，
+        // 而且此刻还没有蛇），再 initGame() —— initGame 结尾会 drawCanvas()，
+        // 那时主题已经正确、蛇也已经就位。早先的写法是 initGame 在 applyTheme
+        // 之后，而 applyTheme 会立刻重绘，导致空蛇被绘制并抛错、打断整个启动。
         applyTheme(safeGet('snakeTheme') === 'dark' ? 'dark' : 'light');
 
         initGame();
         assertCycleRoute();   // 自检：回路常量与初始蛇形是否自洽
-        startLoop();
-        startAnim();          // 画面刷新循环，与游戏节奏解耦
+
+        // 首个动画循环要先起来：开局提示层上的"按空格开始"有呼吸效果，
+        // 而此刻游戏逻辑循环（startLoop）是**故意不启动**的。
+        startAnim();
+
+        // 开局停在提示界面上，按空格或点画面才开始。startLoop 由 beginRound() 负责。
+        showRoundPrompt();
     }
 
     window.onload = bootstrap;

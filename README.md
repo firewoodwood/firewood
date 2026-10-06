@@ -702,7 +702,7 @@ circuits/
 
 #### 电路图 1（RC 低通滤波）
 
-<img src="circuits/output/hand_c1_rc_circuit.jpg" alt="图 1　RC 低通滤波电路" width="620">
+<img src="circuits/output/hand_c1_rc_circuit.jpg" alt="图 1　RC 低通滤波电路" width="780">
 
 > 手绘：R = 1 kΩ、C = 100 nF，标出了 Vi / Vo 端口，旁边写了 τ = RC = 100 µs 与 f_c = 1/(2πRC) = 1591.55 Hz 的推导。
 #### 元件取值与理论计算
@@ -762,7 +762,7 @@ H(jω) = 1 / (1 + jωRC)
 
 #### 电路图 2（含源二端网络）
 
-<img src="circuits/output/hand_c2_network.jpg" alt="图 2　含源二端网络与戴维南等效电路" width="620">
+<img src="circuits/output/hand_c2_network.jpg" alt="图 2　含源二端网络与戴维南等效电路" width="780">
 
 > 手绘：左边是含源二端网络（V1 = 12 V 串 R1 = 4 kΩ、V2 = 6 V 串 R2 = 2 kΩ，两路汇到端口 a-b，b 为地，端口上接负载 R_L），右边是等价的 V_th = 8 V 串 R_th = 1333.33 Ω。旁边写了 V_oc、I_sc、R_th 三步推导（`3V_oc = 24 V → V_oc = 8 V`、`I_sc = 12/4k + 6/2k = 6 mA`、`R_th = V_oc/I_sc = 1333.33 Ω`）。
 >
@@ -771,7 +771,7 @@ H(jω) = 1 / (1 + jωRC)
 
 #### 电路图 3（戴维南等效电路）
 
-<img src="circuits/output/hand_c3_amplifier.jpg" alt="图 4　NMOS 共源放大完整电路" width="620">
+<img src="circuits/output/hand_c3_amplifier.jpg" alt="图 4　NMOS 共源放大完整电路" width="780">
 
 > 手绘：VDD = 5 V 经 Rd = 2 kΩ 到漏极；Rg1 = 60 kΩ 与 Rg2 = 40 kΩ 分压接栅极；输入 Vi = 10 mV / 1 kHz 经耦合电容 Cb1 进栅极；源极 s 与衬底 B 短接后接地；图旁标了 K = 0.8 mA/V²、V_th = 1 V、λ = 0.02 /V。
 #### 理论计算
@@ -852,7 +852,7 @@ V = (V1/R1 + V2/R2) / (1/R1 + 1/R2 + 1/R_L)
 
 #### 电路图 4（NMOS 共源放大完整电路）
 
-<img src="circuits/output/hand_c3_dc_path.jpg" alt="图 5a　直流通路" width="620">
+<img src="circuits/output/hand_c3_dc_path.jpg" alt="图 5a　直流通路" width="780">
 
 > 手绘的直流通路：Cb1 画成断路，输入源被隔离，栅极只由 Rg1/Rg2 分压。**题目要求手算的静态工作点四步就写在这张图旁**：
 >
@@ -911,7 +911,7 @@ Av = vo/vi = −gm·(Rd ∥ ro) = −0.8 mA/V × 1.9685 kΩ = −1.5748
 
 #### 直流通路与小信号等效模型
 
-<img src="circuits/output/hand_c3_small_signal.jpg" alt="图 5b　小信号等效模型" width="620">
+<img src="circuits/output/hand_c3_small_signal.jpg" alt="图 5b　小信号等效模型" width="780">
 
 > 手绘的小信号等效模型（中频）：vi 加在栅-源之间，栅极到地只有 Rg1∥Rg2 = 24 kΩ，受控源 `gm·vgs` 从漏极流向源极（源接地），Rd = 2 kΩ 与 ro = 125 kΩ 并联在漏极节点与地之间，输出 vo 取在漏极节点上。**题目要求手算的小信号两项就写在这张图旁**：
 >

@@ -301,6 +301,7 @@
             <div class="score-area">
                 <span>🍎 <span id="scoreDisplay">0</span></span>
                 <span>🏆 <span id="highScoreDisplay">0</span></span>
+                <span>🎮 <span id="roundCountDisplay">0</span> 局</span>
             </div>
         </div>
 
@@ -368,6 +369,7 @@
     const ctx = canvas.getContext('2d');
     const scoreSpan = document.getElementById('scoreDisplay');
     const highScoreSpan = document.getElementById('highScoreDisplay');
+    const roundCountSpan = document.getElementById('roundCountDisplay');
     const statusTip = document.getElementById('statusTip');
     const aiProgress = document.getElementById('aiProgress');
     const winBanner = document.getElementById('winBanner');
@@ -383,6 +385,7 @@
     let score = 0;
     let stepCount = 0;               // 本局走过的步数，胜利界面展示
     let highScore = 0;
+    let roundCount = 0;              // 累计已完成的局数（跨局累加，刷新后保留）
     let gameOver = false;
     let winFlag = false;
     let gameLoopTimer = null;
@@ -1053,6 +1056,10 @@
         if (roundHistory.length > HISTORY_MAX) {
             roundHistory = roundHistory.slice(-HISTORY_MAX);
         }
+        // 累计总局数：不受 HISTORY_MAX 限制，一直加上去
+        roundCount++;
+        safeSet('snakeRoundCount', String(roundCount));
+        updateRoundCountDisplay();
         saveHistory();
         renderHistory();
     }
@@ -1448,6 +1455,18 @@
             safeSet('snakeHighScore', String(highScore));
         }
         highScoreSpan.innerText = highScore;
+        updateRoundCountDisplay();
+    }
+
+    /**
+     * 刷新「局数」显示。
+     * 任务书的「计分制」验收标准要求记录 得分 / 最高分 / 局数 三项，
+     * 前两项原本就有，局数是一直缺的。
+     * 注意：这里显示的是**累计总局数**（跨局累加、刷新后保留），
+     * 和右侧战绩面板的"最近 10 局"是两件事。
+     */
+    function updateRoundCountDisplay() {
+        if (roundCountSpan) roundCountSpan.innerText = roundCount;
     }
 
     function clearStatus() {
@@ -1776,6 +1795,10 @@
 
         loadHistory();
         renderHistory();
+
+        // 累计局数：与最高分同样对待，从 localStorage 读回来
+        roundCount = parseInt(safeGet('snakeRoundCount') || '0', 10) || 0;
+        updateRoundCountDisplay();
 
         // 顺序要紧：先 applyTheme 把 data-theme 属性设好（它内部不再重绘，
         // 而且此刻还没有蛇），再 initGame() —— initGame 结尾会 drawCanvas()，

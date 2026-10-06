@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贪吃蛇</title>
+    <style>
+        /* ========== 全局主题变量 ========== */
+        :root {
+            --bg-color: #f0f2f5;
+            --panel-bg: #ffffff;
+            --text-color: #1a1a2e;
+            --border-color: #ddd;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            --grid-line: #e0e0e0;
+            --snake-head: #2ecc71;
+            --snake-body: #27ae60;
+            --food-color: #e74c3c;
+            --btn-bg: #4a90d9;
+            --btn-hover: #357abd;
+            --ai-btn-bg: #8e44ad;
+            --ai-btn-hover: #732d91;
+            --muted: rgba(0, 0, 0, 0.05);
+        }
+
+        [data-theme="dark"] {
+            --bg-color: #1a1a2e;
+            --panel-bg: #16213e;
+            --text-color: #eaeaea;
+            --border-color: #2a3a5e;
+            --shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+            --grid-line: #2a3a5e;
+            --snake-head: #2ecc71;
+            --snake-body: #1abc9c;
+            --food-color: #f1c40f;
+            --btn-bg: #e67e22;
+            --btn-hover: #d35400;
+            --ai-btn-bg: #9b59b6;
+            --ai-btn-hover: #8e44ad;
+            --muted: rgba(255, 255, 255, 0.06);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg-color);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            transition: background 0.3s ease;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .layout {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .game-wrapper {
+            background: var(--panel-bg);
+            padding: 30px 35px 35px 35px;
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+            text-align: center;
+            max-width: 650px;
+            width: fit-content;
+        }
+
+        /* ========== 多局战绩面板 ========== */
+        .history-panel {
+            background: var(--panel-bg);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            padding: 24px 22px;
+            width: 260px;
+            color: var(--text-color);
+            transition: background 0.3s ease, box-shadow 0.3s ease;
+        }
+        .history-panel h3 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .history-sub {
+            font-size: 12px;
+            opacity: 0.55;
+            margin-bottom: 14px;
+        }
+        .history-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+        .history-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            background: var(--muted);
+            border-radius: 10px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .history-list .h-index { opacity: 0.5; min-width: 34px; }
+        .history-list .h-mode { opacity: 0.75; font-weight: 500; }
+        .history-list .h-score { margin-left: auto; }
+        .history-empty { font-size: 13px; opacity: 0.5; padding: 8px 2px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 18px;
+            color: var(--text-color);
+            transition: color 0.3s ease;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .title { font-size: 24px; font-weight: 700; letter-spacing: 1px; }
+
+        .score-area {
+            display: flex;
+            gap: 18px;
+            font-weight: 600;
+            font-size: 17px;
+        }
+        .score-area span {
+            background: var(--muted);
+            padding: 6px 14px;
+            border-radius: 40px;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 16px;
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            width: 100%;
+            aspect-ratio: 1/1;
+            max-width: 500px;
+            height: auto;
+            transition: border 0.3s ease, background 0.3s ease;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: center;
+            gap: 14px;
+            margin-top: 22px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            background: var(--btn-bg);
+            color: #fff;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
+            letter-spacing: 0.5px;
+            min-width: 100px;
+        }
+        .btn:hover {
+            background: var(--btn-hover);
+            transform: scale(1.02);
+        }
+
+        .btn-ai {
+            background: var(--ai-btn-bg);
+            box-shadow: 0 4px 12px rgba(142, 68, 173, 0.4);
+        }
+        .btn-ai:hover {
+            background: var(--ai-btn-hover);
+        }
+
+        .btn-theme {
+            background: transparent;
+            color: var(--text-color);
+            box-shadow: none;
+            border: 2px solid var(--border-color);
+            min-width: auto;
+            padding: 8px 18px;
+        }
+        .btn-theme:hover {
+            background: var(--border-color);
+            transform: none;
+        }
+
+        /* 结束本局：红色，和普通按钮区分开，避免误点 */
+        .btn-danger {
+            background: #e74c3c;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.35);
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        /* 暂停中的按钮做成高亮态，一眼能看出当前是暂停 */
+        .btn.is-paused {
+            background: #f39c12;
+            box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.35);
+        }
+
+        .status-area {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 14px;
+            color: var(--text-color);
+            font-weight: 500;
+            font-size: 15px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .status-tip { opacity: 0.9; min-height: 24px; }
+        .ai-progress { font-weight: 600; color: var(--ai-btn-bg); }
+
+        .hint {
+            margin-top: 6px;
+            font-size: 13px;
+            opacity: 0.5;
+            color: var(--text-color);
+        }
+        /* 返回个人主页的入口。
+           父元素 .hint 有 opacity:0.5，链接会被一起压淡，所以这里单独提到 1，
+           否则这个链接几乎看不见、不像能点的东西。 */
+        .hint a {
+            color: var(--btn-bg);
+            opacity: 1;
+            text-decoration: none;
+            border-bottom: 1px solid currentColor;
+            padding-bottom: 1px;
+            transition: color 0.2s;
+        }
+        .hint a:hover { color: var(--btn-hover); }
+
+        /* ========== 胜利后的操作区 ==========
+           展示内容（奖杯、得分、蛇长、步数）画在画布的胜利界面上，
+           这里只放两个按钮：玩家要能自己选"继续玩"还是"重新开始"。
+           用真实按钮而不是画在 canvas 上，键盘和读屏才都能用。 */
+        .win-banner {
+            display: none;              /* 默认隐藏，达标时由 JS 显示 */
+            margin-top: 16px;
+            padding: 12px 18px;
+            border-radius: 16px;
+            border: 2px solid #f1c40f;
+            background: rgba(241, 196, 15, 0.14);
+        }
+        .win-banner.show { display: block; }
+        .win-banner .win-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-continue {
+            background: #2ecc71;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.35);
+        }
+        .btn-continue:hover { background: #27ae60; }
+
+        @media (max-width: 980px) {
+            .history-panel { width: 100%; max-width: 650px; }
+            .history-list { max-height: 200px; }
+        }
+
+        @media (max-width: 500px) {
+            .game-wrapper { padding: 18px; }
+            .header { flex-direction: column; gap: 6px; }
+            .score-area { font-size: 14px; gap: 10px; }
+            .btn { padding: 8px 14px; font-size: 14px; min-width: 70px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="layout">
+    <div class="game-wrapper">
+        <!-- 头部 -->
+        <div class="header">
+            <div class="title">🐍 贪吃蛇</div>
+            <div class="score-area">
+                <span>🍎 <span id="scoreDisplay">0</span></span>
+                <span>🏆 <span id="highScoreDisplay">0</span></span>
+                <span>🎮 <span id="roundCountDisplay">0</span> 局</span>
+            </div>
+        </div>
+
+        <!-- 画布 -->
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <button class="btn" id="pauseBtn">⏸️ 暂停</button>
+            <button class="btn" id="restartBtn">🔄 重新开始</button>
+            <button class="btn btn-ai" id="aiBtn">🤖 AI自动玩</button>
+            <button class="btn btn-danger" id="endBtn">💀 结束本局</button>
+            <button class="btn btn-theme" id="themeToggle">🌓 主题</button>
+        </div>
+
+        <!-- 状态信息 -->
+        <div class="status-area">
+            <div class="status-tip" id="statusTip">⬆️⬇️⬅️➡️ 方向键控制</div>
+            <div class="ai-progress" id="aiProgress"></div>
+        </div>
+        <div class="hint">
+            最高分、主题、战绩均自动保存 ·
+            <a href="../student/index.html">返回个人主页</a> ·
+            <a href="../index.html">返回首页</a>
+        </div>
+
+        <!-- 胜利后的操作区：展示内容画在画布上，这里只放两个按钮 -->
+        <div class="win-banner" id="winBanner" role="status" aria-live="polite">
+            <div class="win-actions">
+                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 继续玩</button>
+                <button class="btn" id="restartFromWinBtn" type="button">🔄 重新开始</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 多局战绩：最近 10 局 -->
+    <aside class="history-panel">
+        <h3>📋 多局战绩</h3>
+        <div class="history-sub">最近 10 局 · 刷新后保留</div>
+        <ul class="history-list" id="historyList"></ul>
+        <div class="history-empty" id="historyEmpty">还没有对局记录，先玩一局吧。</div>
+    </aside>
+</div>
+
+<script>
+    // ================================================================
+    //  核心参数
+    // ================================================================
+    const GRID_SIZE = 20;
+    const TICK_INTERVAL = 150;          // 手动模式：每步 150ms
+    // AI 模式：每步 70ms（比手动更快，但比早期版本慢得多）。
+    // 刻意保持匀速、不做自动提速，目的是能看清 AI 的每一步走法。
+    // 代价是铺满全盘要 2 万步左右，一局约 23 分钟——想快就调小这个值，
+    // 想更慢就调大（值越小越快）。用「暂停 / 结束本局」可随时中断长局。
+    const AI_TICK_INTERVAL = 70;
+    // 胜利分数：首次达到这个分数时弹出胜利界面，由玩家决定继续还是重开。
+    // 只触发一次（重开或换局才复位），否则每吃一个食物都会再弹一次，很烦。
+    const WIN_SCORE = 15;
+    const HISTORY_MAX = 10;             // 战绩最多保留局数
+    const EFFECT_PARTICLE_LIFE = 620;   // 粒子寿命(ms)
+    const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
+    const EFFECT_FLASH_LIFE = 320;      // 死亡闪屏时长(ms)
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreSpan = document.getElementById('scoreDisplay');
+    const highScoreSpan = document.getElementById('highScoreDisplay');
+    const roundCountSpan = document.getElementById('roundCountDisplay');
+    const statusTip = document.getElementById('statusTip');
+    const aiProgress = document.getElementById('aiProgress');
+    const winBanner = document.getElementById('winBanner');
+    const historyList = document.getElementById('historyList');
+    const historyEmpty = document.getElementById('historyEmpty');
+    const pauseBtn = document.getElementById('pauseBtn');
+
+    // ---------- 游戏状态 ----------
+    let snake = [];
+    let food = { x: 8, y: 10 };
+    let direction = 'right';
+    let nextDirection = 'right';
+    let score = 0;
+    let stepCount = 0;               // 本局走过的步数，胜利界面展示
+    let highScore = 0;
+    let roundCount = 0;              // 累计已完成的局数（跨局累加，刷新后保留）
+    let gameOver = false;
+    let winFlag = false;
+    let gameLoopTimer = null;
+    let animTimer = null;            // 画面刷新定时器（独立于游戏逻辑）
+    let paused = false;              // 暂停：不推进、不重绘定时器，恢复后接着走
+    let endReason = null;            // 最近一次结束的原因，供画面/提示使用
+
+    // ---------- 反馈效果数据 ----------
+    // 都是纯视觉的短生命周期对象，每帧在 updateEffects() 里推进、过期即丢弃。
+    // 用 Date.now() 当时间基准：AI 模式一帧可能走多步（这里现在是 1 步），
+    // 用时间而不是帧数计算寿命，动画时长才不会随速度变化。
+    let particles = [];              // 吃食物时炸开的小点
+    let floaters = [];               // 上浮并淡出的文字，如 "+1"
+    let deathFlashUntil = 0;         // 死亡闪屏的截止时间戳
+
+    // ---------- AI 状态 ----------
+    let aiMode = false;              // 当前是否由 AI 接管
+    let aiResult = null;             // null | 'fail' | 'full'
+    let foodEatenCount = 0;          // AI 本局累计吃到几个食物
+
+    // ---------- 达标状态 ----------
+    let winShown = false;            // 本局是否已经弹过达标界面（每局只弹一次）
+    let winScreenVisible = false;    // 胜利界面此刻是否显示在画面上
+    let winPausedByBanner = false;   // 界面是不是把游戏停住了（用于"继续玩"时恢复）
+
+    // ---------- 开局提示界面 ----------
+    // 含义反过来写更省事：roundPending 为 true 表示"这一局还没开始，
+    // 正停在开局提示上"——不推进逻辑、不接受转向，画面由 drawCanvas
+    // 画出提示层。按空格或点画面才开始。只有"开一局手动游戏"会置 true，
+    // AI 演示与旧的一局结束都不经过它，避免挡住已有流程。
+    let roundPending = false;
+
+    // ---------- 战绩 / 主题 ----------
+    let roundHistory = [];
+    let currentTheme = 'light';
+
+    // 方向向量：只此一份，BFS 与真实移动共用，避免"算法和移动不一致"
+    const DIR_VECTORS = [
+        { name: 'up',    dx: 0,  dy: -1 },
+        { name: 'down',  dx: 0,  dy: 1  },
+        { name: 'left',  dx: -1, dy: 0  },
+        { name: 'right', dx: 1,  dy: 0  }
+    ];
+    const OPPOSITE = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+    // 游戏用到的哈密顿回路（预计算常量，见下方 CYCLE_ROUTE 的定义与说明）。
+    // 蛇沿它循环前进可以遍历每一个格子且永不撞到自己。
+    let cycleRoute = [];
+    let cycleIndex = new Map();   // "x,y" -> 在回路上的序号
+
+    // ================================================================
+    //  安全读写 localStorage（file:// 或隐私模式下可能抛异常）
+    // ================================================================
+    function safeGet(key) {
+        try { return localStorage.getItem(key); } catch (e) { return null; }
+    }
+    function safeSet(key, value) {
+        try { localStorage.setItem(key, value); } catch (e) { /* 忽略 */ }
+    }
+
+    // ================================================================
+    //  初始化 / 重置
+    // ================================================================
+    function initGame() {
+        // 初始蛇形必须落在回路上、且"蛇头在回路序号的最后"、方向与回路一致，
+        // 否则 AI 一旦接管就可能出现蛇头前方的回路格被自己身体占用。
+        //
+        // 现在取回路上下标 368 处的一段：route[368]=(9,9), route[367]=(9,10),
+        // route[366]=(10,10)，恰好贴着棋盘正中心（20×20 的中心是 9.5,9.5，
+        // 这三格距中心都是 1 格），方向 up 与回路走向一致。
+        // 这段是用 _center.js 在回路上按"距中心最近"筛出来的，不是手挑的。
+        snake = [
+            { x: 9, y: 9 },
+            { x: 9, y: 10 },
+            { x: 10, y: 10 }
+        ];
+        direction = 'up';
+        nextDirection = 'up';
+        score = 0;
+        stepCount = 0;
+        gameOver = false;
+        winFlag = false;
+        aiMode = false;
+        aiResult = null;
+        foodEatenCount = 0;
+        paused = false;
+        endReason = null;
+        // 达标界面随新一局复位
+        winShown = false;
+        winScreenVisible = false;
+        winPausedByBanner = false;
+        hideWinBanner();
+        effectsReset();
+        buildCycleRoute();
+        aiProgress.innerText = '';
+        updateScoreDisplay();
+        updatePauseButton();
+        // 初始蛇长 3 远小于总格数，这里必然能生成食物
+        if (!generateFood()) {
+            endGame('蛇身铺满全部格子，这局到头了', 'full');
+        }
+        clearStatus();
+        drawCanvas();
+    }
+
+    /**
+     * 重置到一局干净的对局，但**不启动游戏循环**。
+     * 循环由 beginRound() 负责 —— 现在每局都要先停在开局提示上，
+     * 所以这里如果顺手 startLoop()，就会在玩家还没看清目标时蛇已经在动了。
+     */
+    function resetGame() {
+        stopLoop();
+        initGame();
+        statusTip.innerText = '🔄 新的一局！';
+    }
+
+    // ================================================================
+    //  食物生成（必须保证有解）
+    // ----------------------------------------------------------------
+    //  不能随便在空格里撒食物。蛇身始终是回路上的一段连续弧，蛇只能沿
+    //  回路向前走；如果食物落在蛇头**后方**的格子上，蛇根本绕不回去，
+    //  这一局就变成死局了。
+    //
+    //  所以食物的候选范围被限制为：从蛇头沿回路向前 1 ~ (L+1) 格。
+    //   - 起点从「蛇头前 1 格」开始：不能生成在蛇头脚下，否则白送且看起来像 bug。
+    //   - 上界取 L+1（L 为当前蛇长）：吃到后蛇长变成 L+1，此时蛇身刚好是
+    //     一段首尾相接、长度 L+1 的弧（头和尾在回路上相邻），不变式继续成立。
+    //     这个上界同时保证了"无论随机落到哪一格，吃到它都不会破坏结构"。
+    //
+    //  这个范围里必然有空格（蛇长 L < 总数，且上界 ≥ 1），所以不会无解；
+    //  万一没有，直接抛错暴露问题，而不是静默退化成"随便找个空格"。
+    //
+    //  返回值：true 表示已生成食物；false 表示棋盘已满（调用方应判定胜利）。
+    // ================================================================
+    function generateFood() {
+        const totalCells = GRID_SIZE * GRID_SIZE;
+        if (snake.length >= totalCells) return false;
+
+        if (!cycleRoute.length) buildCycleRoute();
+        const head = snake[0];
+        const headIdx = cycleIndex.get(head.x + ',' + head.y);
+        if (headIdx === undefined) {
+            throw new Error('蛇头不在回路上：(' + head.x + ',' + head.y + ')');
+        }
+
+        const occupied = new Set(snake.map(seg => seg.x + ',' + seg.y));
+        // 向前可达的范围：最少 1 格，最多 L+1 格，同时不超过剩余空格数
+        const maxAhead = Math.min(snake.length + 1, totalCells - snake.length);
+        const offset = 1 + Math.floor(Math.random() * maxAhead);
+        for (let i = 0; i < totalCells; i++) {
+            const cell = cycleRoute[(headIdx + offset + i) % totalCells];
+            if (!occupied.has(cell.x + ',' + cell.y)) {
+                food = { x: cell.x, y: cell.y };
+                return true;
+            }
+        }
+        throw new Error('食物生成失败：向前 ' + maxAhead + ' 格内没有空位');
+    }
+
+    // ================================================================
+    //  核心移动（由定时器调用）
+    // ================================================================
+    function moveSnake() {
+        if (gameOver || paused) return;
+
+        const totalCells = GRID_SIZE * GRID_SIZE;
+        const cellSize = canvas.width / GRID_SIZE;
+
+        // ---- 方向决策 ----
+        let moveDir;
+        if (aiMode) {
+            moveDir = decideMove();
+            if (!moveDir) {
+                endGame('AI 无路可走 😵', 'fail');
+                return;
+            }
+        } else {
+            moveDir = direction;
+            if (nextDirection && OPPOSITE[nextDirection] !== direction) {
+                moveDir = nextDirection;
+            }
+        }
+
+        // ---- 计算新蛇头 ----
+        const vec = DIR_VECTORS.find(v => v.name === moveDir);
+        const head = snake[0];
+        const newHead = { x: head.x + vec.dx, y: head.y + vec.dy };
+
+        // ---- 越界 ----
+        if (newHead.x < 0 || newHead.x >= GRID_SIZE || newHead.y < 0 || newHead.y >= GRID_SIZE) {
+            endGame('撞墙了... 💥', 'fail');
+            return;
+        }
+
+        // ---- 是否吃到食物（决定蛇尾这一帧是否让位）----
+        const isEating = (newHead.x === food.x && newHead.y === food.y);
+
+        // ---- 身体碰撞：不吃食物时蛇尾会腾空，所以排除最后一节 ----
+        const bodyLimit = isEating ? snake.length : snake.length - 1;
+        for (let i = 0; i < bodyLimit; i++) {
+            if (snake[i].x === newHead.x && snake[i].y === newHead.y) {
+                endGame('咬到自己了 😵', 'fail');
+                return;
+            }
+        }
+
+        // ---- 结算蛇 ----
+        snake.unshift(newHead);
+        if (!isEating) snake.pop();
+        direction = moveDir;
+        stepCount++;          // 每成功走一步就记一次（死亡那一步不计，因为提前 return 了）
+
+        // ---- 处理食物 ----
+        if (isEating) {
+            score++;
+            if (score > highScore) {
+                highScore = score;
+                safeSet('snakeHighScore', String(highScore));
+            }
+            updateScoreDisplay();
+            // 反馈：在食物原位置炸开小点、浮出「+1」
+            spawnEatEffects(
+                food.x * cellSize + cellSize / 2,
+                food.y * cellSize + cellSize / 2
+            );
+
+            // 达标检查：首次到 15 分会弹出胜利界面，停住等玩家选"继续玩 / 重新开始"。
+            // 放在生成新食物之前——界面期间不需要新食物，避免它一闪而过。
+            checkWinScore();
+            if (paused) { drawCanvas(); return; }
+
+            if (aiMode) {
+                foodEatenCount++;
+                // 不再显示 "n / 399" 这种上限，只报已吃数量：本局可以一直玩下去
+                aiProgress.innerText = '🍽️ ' + foodEatenCount;
+            }
+
+            // 终局：蛇身铺满全部格子，再没有空格可放食物。
+            // 这**不是胜利条件**（胜利是拿到 WIN_SCORE 分那条路径），
+            // 而是棋盘物理上装不下了，这局自然到头。
+            if (snake.length >= totalCells || !generateFood()) {
+                endGame('蛇身铺满全部 ' + totalCells + ' 格，这局到头了' +
+                        (aiMode ? '（全程零人工操作）' : '') +
+                        '。点「重新开始」再来一局', 'full');
+                return;
+            }
+            if (gameOver) { drawCanvas(); return; }
+        }
+
+        drawCanvas();
+    }
+
+    // ================================================================
+    //  AI 决策核心
+    // ----------------------------------------------------------------
+    //  两个策略，每次移动时二选一：
+    //
+    //   [贪心] 只在"整条吃到食物的路径都安全"时才用。
+    //          安全 = 沿路径逐帧推演，每一步之后可达空格都装得下蛇身，
+    //          且还摸得到自己的尾巴。条件很严，但满足时又快又好看。
+    //
+    //   [回路] 沿预先算好的"回"字形哈密顿回路前进。回路遍历全盘，
+    //          所以迟早会路过食物，而且永远不会撞到自己。
+    //          慢，但绝对安全。
+    //
+    //  实际使用的只有【回路】这一种策略：蛇头永远走向回路上的下一格，
+    //  因为蛇身恒为回路上一段连续弧，那一格必然空着，所以既不会撞墙、
+    //  也不会撞到自己，可以一直玩到铺满全盘为止。
+    //
+    //  下面的贪心 + 安全校验（greedyMoveIfSafe / bfsPath / isPathSafe 等）
+    //  只在回路万一失效时兜底，正常流程不会走到。
+    // ================================================================
+
+    function decideMove() {
+        const dir = getCycleMove();
+        if (dir) return dir;
+        // 理论上到不了这里：蛇身恒为回路上一段连续弧，头部前方必有空格。
+        // 万一不变式被破坏（例如有人改了初始蛇形却没同步），
+        // 退回"贪心 + 安全校验"，宁可走得慢也不要直接判死。
+        return greedyMoveIfSafe();
+    }
+
+    /**
+     * 贪心决策：返回一个"整条到食物的路径都安全"的方向；
+     * 没有这样的方向就返回 null（由调用方转回路策略）。
+     */
+    function greedyMoveIfSafe() {
+        const head = snake[0];
+        const candidates = [];
+
+        for (const v of DIR_VECTORS) {
+            const state = buildStateAfter(head, v.name);
+            if (!state) continue;                       // 撞墙或撞身体，淘汰
+            const analysis = analyzeSpace(state);
+            if (analysis.space < state.snake.length) continue;   // 落子即困死，淘汰
+            candidates.push({ dir: v.name, state: state, space: analysis.space });
+        }
+        if (!candidates.length) return null;
+
+        const foodFirst = bfsFirstStep(food, bodyWithoutTail());
+        const eating = candidates.find(c => c.dir === foodFirst);
+        if (!eating) return null;                       // 到食物的路被堵住
+
+        const path = bfsPath(food);
+        if (path && isPathSafe(eating.state, path)) return eating.dir;
+        return null;
+    }
+
+    /**
+     * 哈密顿回路（预计算常量）。
+     *
+     * 这是 20×20 盘上一条真正闭合的回路：400 个格子各出现一次，
+     * 相邻两项在网格上都相邻，且最后一项 route[399]=(0,1) 与
+     * 起点 route[0]=(0,0) 也相邻。蛇沿它前进时，身体永远是回路上
+     * 一段「连续弧」，蛇头前面那一格必然空着 —— 数学上不可能撞到自己，
+     * 也不可能被困死，所以 AI 可以一直玩到铺满全盘为止，不是概率问题。
+     *
+     * 为什么是硬编码常量而不是运行时算：
+     *   用 Pósa 旋转-扩展法在 20×20 上求一条回路实测要 1.3 秒左右，
+     *   放在启动路径上会让页面明显卡顿。回路与游戏逻辑无关、永不变，
+     *   属于纯数据，因此离线生成一次后固化在这里。
+     *   生成器与校验脚本：_gen_route.js、_check_cycle.js
+     *   （校验内容：长度 400、格子唯一、含首尾闭合的每条边都相邻）。
+     */
+    const CYCLE_ROUTE = [
+        {x:0,y:0},{x:1,y:0},{x:2,y:0},{x:3,y:0},{x:4,y:0},{x:5,y:0},{x:6,y:0},{x:7,y:0},{x:8,y:0},{x:8,y:1},
+        {x:7,y:1},{x:6,y:1},{x:5,y:1},{x:5,y:2},{x:6,y:2},{x:7,y:2},{x:8,y:2},{x:9,y:2},{x:9,y:1},{x:9,y:0},
+        {x:10,y:0},{x:11,y:0},{x:12,y:0},{x:12,y:1},{x:11,y:1},{x:10,y:1},{x:10,y:2},{x:11,y:2},{x:12,y:2},{x:12,y:3},
+        {x:12,y:4},{x:12,y:5},{x:12,y:6},{x:11,y:6},{x:11,y:5},{x:11,y:4},{x:11,y:3},{x:10,y:3},{x:10,y:4},{x:10,y:5},
+        {x:10,y:6},{x:10,y:7},{x:11,y:7},{x:12,y:7},{x:12,y:8},{x:13,y:8},{x:14,y:8},{x:14,y:7},{x:13,y:7},{x:13,y:6},
+        {x:14,y:6},{x:14,y:5},{x:13,y:5},{x:13,y:4},{x:14,y:4},{x:15,y:4},{x:15,y:5},{x:15,y:6},{x:16,y:6},{x:16,y:5},
+        {x:16,y:4},{x:16,y:3},{x:15,y:3},{x:14,y:3},{x:13,y:3},{x:13,y:2},{x:14,y:2},{x:15,y:2},{x:16,y:2},{x:16,y:1},
+        {x:15,y:1},{x:14,y:1},{x:13,y:1},{x:13,y:0},{x:14,y:0},{x:15,y:0},{x:16,y:0},{x:17,y:0},{x:18,y:0},{x:19,y:0},
+        {x:19,y:1},{x:19,y:2},{x:18,y:2},{x:18,y:1},{x:17,y:1},{x:17,y:2},{x:17,y:3},{x:17,y:4},{x:18,y:4},{x:18,y:3},
+        {x:19,y:3},{x:19,y:4},{x:19,y:5},{x:19,y:6},{x:18,y:6},{x:18,y:5},{x:17,y:5},{x:17,y:6},{x:17,y:7},{x:16,y:7},
+        {x:15,y:7},{x:15,y:8},{x:16,y:8},{x:17,y:8},{x:17,y:9},{x:16,y:9},{x:15,y:9},{x:14,y:9},{x:13,y:9},{x:12,y:9},
+        {x:12,y:10},{x:13,y:10},{x:14,y:10},{x:14,y:11},{x:13,y:11},{x:12,y:11},{x:12,y:12},{x:12,y:13},{x:13,y:13},{x:13,y:12},
+        {x:14,y:12},{x:15,y:12},{x:16,y:12},{x:16,y:11},{x:15,y:11},{x:15,y:10},{x:16,y:10},{x:17,y:10},{x:17,y:11},{x:18,y:11},
+        {x:18,y:10},{x:18,y:9},{x:18,y:8},{x:18,y:7},{x:19,y:7},{x:19,y:8},{x:19,y:9},{x:19,y:10},{x:19,y:11},{x:19,y:12},
+        {x:18,y:12},{x:17,y:12},{x:17,y:13},{x:16,y:13},{x:15,y:13},{x:14,y:13},{x:14,y:14},{x:13,y:14},{x:12,y:14},{x:12,y:15},
+        {x:11,y:15},{x:11,y:14},{x:11,y:13},{x:11,y:12},{x:10,y:12},{x:10,y:13},{x:9,y:13},{x:9,y:12},{x:8,y:12},{x:8,y:13},
+        {x:7,y:13},{x:6,y:13},{x:6,y:12},{x:7,y:12},{x:7,y:11},{x:6,y:11},{x:5,y:11},{x:4,y:11},{x:3,y:11},{x:3,y:12},
+        {x:4,y:12},{x:5,y:12},{x:5,y:13},{x:4,y:13},{x:3,y:13},{x:2,y:13},{x:2,y:14},{x:3,y:14},{x:4,y:14},{x:4,y:15},
+        {x:5,y:15},{x:5,y:14},{x:6,y:14},{x:6,y:15},{x:7,y:15},{x:7,y:14},{x:8,y:14},{x:9,y:14},{x:10,y:14},{x:10,y:15},
+        {x:9,y:15},{x:8,y:15},{x:8,y:16},{x:7,y:16},{x:6,y:16},{x:6,y:17},{x:6,y:18},{x:7,y:18},{x:7,y:17},{x:8,y:17},
+        {x:9,y:17},{x:9,y:16},{x:10,y:16},{x:11,y:16},{x:12,y:16},{x:12,y:17},{x:11,y:17},{x:10,y:17},{x:10,y:18},{x:11,y:18},
+        {x:12,y:18},{x:13,y:18},{x:13,y:17},{x:13,y:16},{x:13,y:15},{x:14,y:15},{x:15,y:15},{x:15,y:14},{x:16,y:14},{x:16,y:15},
+        {x:17,y:15},{x:17,y:14},{x:18,y:14},{x:18,y:13},{x:19,y:13},{x:19,y:14},{x:19,y:15},{x:18,y:15},{x:18,y:16},{x:19,y:16},
+        {x:19,y:17},{x:18,y:17},{x:18,y:18},{x:19,y:18},{x:19,y:19},{x:18,y:19},{x:17,y:19},{x:16,y:19},{x:15,y:19},{x:15,y:18},
+        {x:15,y:17},{x:16,y:17},{x:16,y:18},{x:17,y:18},{x:17,y:17},{x:17,y:16},{x:16,y:16},{x:15,y:16},{x:14,y:16},{x:14,y:17},
+        {x:14,y:18},{x:14,y:19},{x:13,y:19},{x:12,y:19},{x:11,y:19},{x:10,y:19},{x:9,y:19},{x:9,y:18},{x:8,y:18},{x:8,y:19},
+        {x:7,y:19},{x:6,y:19},{x:5,y:19},{x:5,y:18},{x:5,y:17},{x:5,y:16},{x:4,y:16},{x:3,y:16},{x:3,y:15},{x:2,y:15},
+        {x:1,y:15},{x:1,y:16},{x:2,y:16},{x:2,y:17},{x:1,y:17},{x:1,y:18},{x:2,y:18},{x:3,y:18},{x:3,y:17},{x:4,y:17},
+        {x:4,y:18},{x:4,y:19},{x:3,y:19},{x:2,y:19},{x:1,y:19},{x:0,y:19},{x:0,y:18},{x:0,y:17},{x:0,y:16},{x:0,y:15},
+        {x:0,y:14},{x:1,y:14},{x:1,y:13},{x:0,y:13},{x:0,y:12},{x:0,y:11},{x:0,y:10},{x:0,y:9},{x:0,y:8},{x:0,y:7},
+        {x:0,y:6},{x:1,y:6},{x:1,y:7},{x:1,y:8},{x:1,y:9},{x:1,y:10},{x:1,y:11},{x:1,y:12},{x:2,y:12},{x:2,y:11},
+        {x:2,y:10},{x:3,y:10},{x:4,y:10},{x:5,y:10},{x:6,y:10},{x:6,y:9},{x:5,y:9},{x:5,y:8},{x:5,y:7},{x:5,y:6},
+        {x:5,y:5},{x:4,y:5},{x:3,y:5},{x:3,y:6},{x:4,y:6},{x:4,y:7},{x:3,y:7},{x:3,y:8},{x:4,y:8},{x:4,y:9},
+        {x:3,y:9},{x:2,y:9},{x:2,y:8},{x:2,y:7},{x:2,y:6},{x:2,y:5},{x:2,y:4},{x:3,y:4},{x:4,y:4},{x:5,y:4},
+        {x:6,y:4},{x:7,y:4},{x:7,y:5},{x:6,y:5},{x:6,y:6},{x:6,y:7},{x:6,y:8},{x:7,y:8},{x:7,y:7},{x:7,y:6},
+        {x:8,y:6},{x:8,y:7},{x:8,y:8},{x:8,y:9},{x:7,y:9},{x:7,y:10},{x:8,y:10},{x:8,y:11},{x:9,y:11},{x:10,y:11},
+        {x:11,y:11},{x:11,y:10},{x:11,y:9},{x:11,y:8},{x:10,y:8},{x:10,y:9},{x:10,y:10},{x:9,y:10},{x:9,y:9},{x:9,y:8},
+        {x:9,y:7},{x:9,y:6},{x:9,y:5},{x:8,y:5},{x:8,y:4},{x:9,y:4},{x:9,y:3},{x:8,y:3},{x:7,y:3},{x:6,y:3},
+        {x:5,y:3},{x:4,y:3},{x:3,y:3},{x:2,y:3},{x:2,y:2},{x:3,y:2},{x:4,y:2},{x:4,y:1},{x:3,y:1},{x:2,y:1},
+        {x:1,y:1},{x:1,y:2},{x:1,y:3},{x:1,y:4},{x:1,y:5},{x:0,y:5},{x:0,y:4},{x:0,y:3},{x:0,y:2},{x:0,y:1}
+    ];
+
+    function buildCycleRoute() {
+        if (cycleRoute.length) return;
+        cycleRoute = CYCLE_ROUTE;
+        cycleIndex = new Map();
+        for (let i = 0; i < cycleRoute.length; i++) {
+            cycleIndex.set(cycleRoute[i].x + ',' + cycleRoute[i].y, i);
+        }
+    }
+
+    /**
+     * 自检：确认回路常量真的是一条覆盖全盘、处处相邻的闭合回路，
+     * 且初始蛇形确实"躺在"回路上（蛇头序号最大、朝向与回路一致）。
+     * 只在控制台告警，不影响游戏运行。
+     */
+    function assertCycleRoute() {
+        const n = GRID_SIZE;
+        const problems = [];
+        if (cycleRoute.length !== n * n) problems.push('长度 ' + cycleRoute.length + ' != ' + n * n);
+        if (cycleIndex.size !== cycleRoute.length) problems.push('存在重复格子');
+        for (let i = 0; i < cycleRoute.length; i++) {
+            const a = cycleRoute[i];
+            const b = cycleRoute[(i + 1) % cycleRoute.length];
+            if (Math.abs(a.x - b.x) + Math.abs(a.y - b.y) !== 1) {
+                problems.push('第 ' + i + ' 项与下一项不相邻');
+                break;
+            }
+        }
+        // 初始蛇形是否与回路一致：蛇头序号应大于身体，且下一格是回路后继
+        const indices = snake.map(s => cycleIndex.get(s.x + ',' + s.y));
+        if (indices.some(i => i === undefined)) {
+            problems.push('初始蛇形有格子不在回路上');
+        } else {
+            for (let i = 1; i < indices.length; i++) {
+                if (indices[i] !== indices[0] - i) { problems.push('初始蛇形不是回路上的一段连续弧'); break; }
+            }
+            const next = cycleRoute[(indices[0] + 1) % cycleRoute.length];
+            const head = snake[0];
+            if (Math.abs(next.x - head.x) + Math.abs(next.y - head.y) !== 1) {
+                problems.push('蛇头前方不是回路后继');
+            }
+        }
+        if (problems.length) console.warn('[回路自检未通过] ' + problems.join('; '));
+        return problems;
+    }
+
+    /** 兜底策略：朝回路上下一个空格子的方向走 */
+    function getCycleMove() {
+        if (!cycleRoute.length) buildCycleRoute();
+        const head = snake[0];
+        const here = cycleIndex.get(head.x + ',' + head.y);
+        const total = cycleRoute.length;
+        const occupied = toKeySet(snake);
+        for (let step = 1; step < total; step++) {
+            const next = cycleRoute[(here + step) % total];
+            if (!occupied.has(next.x + ',' + next.y)) {
+                const dx = next.x - head.x;
+                const dy = next.y - head.y;
+                const vec = DIR_VECTORS.find(v => v.dx === dx && v.dy === dy);
+                return vec ? vec.name : null;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 构造"假如走这一步"之后的局面。
+     * 必须和 moveSnake 完全一致的规则：吃到食物时蛇尾不让位。
+     */
+    function buildStateAfter(head, dirName) {
+        const vec = DIR_VECTORS.find(v => v.name === dirName);
+        const nx = head.x + vec.dx;
+        const ny = head.y + vec.dy;
+        if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) return null;
+
+        const willEat = (nx === food.x && ny === food.y);
+        const bodyLimit = willEat ? snake.length : snake.length - 1;
+        for (let i = 0; i < bodyLimit; i++) {
+            if (snake[i].x === nx && snake[i].y === ny) return null;
+        }
+
+        const newSnake = [{ x: nx, y: ny }].concat(willEat ? snake : snake.slice(0, -1));
+        // 蛇尾在下一刻是否让位，决定 BFS 里能不能把它当通路
+        return { snake: newSnake, grows: willEat, head: { x: nx, y: ny } };
+    }
+
+    function toKeySet(cells) {
+        const s = new Set();
+        for (const c of cells) s.add(c.x + ',' + c.y);
+        return s;
+    }
+
+    /**
+     * 洪水填充：统计从 head 出发能走到的空格数量，以及能否摸到蛇尾。
+     * 两者都是"这步走完还有没有活路"的量化指标。
+     */
+    function analyzeSpace(state) {
+        const body = toKeySet(state.snake);
+        const headKey = state.head.x + ',' + state.head.y;
+        const tail = state.snake[state.snake.length - 1];
+        const tailKey = tail.x + ',' + tail.y;
+        // 不吃食物时蛇尾会移开，所以它可以当作通路
+        if (!state.grows) body.delete(tailKey);
+
+        const seen = new Set([headKey]);
+        const queue = [state.head];
+        let count = 0;
+        let canReachTail = false;
+
+        while (queue.length) {
+            const cur = queue.shift();
+            if (cur.x === tail.x && cur.y === tail.y) canReachTail = true;
+            for (const v of DIR_VECTORS) {
+                const nx = cur.x + v.dx;
+                const ny = cur.y + v.dy;
+                const key = nx + ',' + ny;
+                if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+                if (body.has(key)) continue;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                count++;
+                queue.push({ x: nx, y: ny });
+            }
+        }
+        return { space: count, canReachTail };
+    }
+
+    /** BFS 最短路：返回第一步的方向，找不到返回 null */
+    function bfsFirstStep(target, blocked) {
+        const head = snake[0];
+        if (head.x === target.x && head.y === target.y) return null;
+        const blockedSet = toKeySet(blocked);
+        const headKey = head.x + ',' + head.y;
+        blockedSet.delete(headKey);
+
+        const visited = new Set([headKey]);
+        const queue = [{ x: head.x, y: head.y, first: null }];
+
+        while (queue.length) {
+            const cur = queue.shift();
+            for (const v of DIR_VECTORS) {
+                const nx = cur.x + v.dx;
+                const ny = cur.y + v.dy;
+                const key = nx + ',' + ny;
+                if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+                if (visited.has(key)) continue;
+                if (blockedSet.has(key)) continue;
+                visited.add(key);
+                const first = cur.first || v.name;
+                if (nx === target.x && ny === target.y) return first;
+                queue.push({ x: nx, y: ny, first });
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 拆掉尾巴后的蛇身 —— 只用于 BFS 寻路。
+     * 保留尾巴是必须的：搜索用的是"静止"棋盘，而移动中尾巴会腾空，
+     * 如果这里把尾巴移除、可行性判断又按移动规则算，两边就打架了。
+     */
+    function bodyWithoutTail() {
+        return snake.slice(0, -1);
+    }
+
+    /**
+     * 沿一条路径逐帧推演，检查"走完这条路的过程中会不会把自己围死"。
+     * 只检查落子后一瞬间是不够的：可能需要走上十几步才吃到食物，
+     * 中途某一步把可达空间压缩到装不下蛇身，就再也出不来了。
+     */
+    function isPathSafe(state, path) {
+        let cur = state;
+        for (const cell of path) {
+            let vec = null;
+            for (const v of DIR_VECTORS) {
+                if (cur.head.x + v.dx === cell.x && cur.head.y + v.dy === cell.y) { vec = v; break; }
+            }
+            if (!vec) return false;
+            const nx = cell.x, ny = cell.y;
+            const willEat = (nx === food.x && ny === food.y);
+            const bodyLimit = willEat ? cur.snake.length : cur.snake.length - 1;
+            for (let i = 0; i < bodyLimit; i++) {
+                if (cur.snake[i].x === nx && cur.snake[i].y === ny) return false;
+            }
+            const newSnake = [{ x: nx, y: ny }].concat(willEat ? cur.snake : cur.snake.slice(0, -1));
+            cur = { snake: newSnake, grows: willEat, head: { x: nx, y: ny } };
+            const an = analyzeSpace(cur);
+            if (an.space < cur.snake.length) return false;   // 这一步走完没活路
+            if (!an.canReachTail) return false;              // 摸不到尾巴 = 危险形状
+        }
+        return true;
+    }
+
+    /** BFS 返回从蛇头到目标的完整路径（含目标格），找不到返回 null */
+    function bfsPath(target) {
+        const head = snake[0];
+        const blockedSet = toKeySet(bodyWithoutTail());
+        const headKey = head.x + ',' + head.y;
+        blockedSet.delete(headKey);
+
+        const prev = new Map();
+        const visited = new Set([headKey]);
+        const queue = [head];
+        let found = false;
+
+        while (queue.length && !found) {
+            const cur = queue.shift();
+            for (const v of DIR_VECTORS) {
+                const nx = cur.x + v.dx;
+                const ny = cur.y + v.dy;
+                const key = nx + ',' + ny;
+                if (nx < 0 || nx >= GRID_SIZE || ny < 0 || ny >= GRID_SIZE) continue;
+                if (visited.has(key) || blockedSet.has(key)) continue;
+                visited.add(key);
+                prev.set(key, cur);
+                if (nx === target.x && ny === target.y) { found = true; break; }
+                queue.push({ x: nx, y: ny });
+            }
+        }
+        if (!found) return null;
+
+        const path = [];
+        let node = { x: target.x, y: target.y };
+        while (!(node.x === head.x && node.y === head.y)) {
+            path.unshift(node);
+            node = prev.get(node.x + ',' + node.y);
+            if (!node) return null;
+        }
+        return path.length ? path : null;
+    }
+
+    // ================================================================
+    //  结束游戏
+    // ----------------------------------------------------------------
+    //  result 取值：
+    //    'fail' —— 撞墙 / 咬到自己，这局输了
+    //    'full' —— 蛇身铺满全盘，没有空格可放食物，这局自然到头（不是失败）
+    //  result 与胜利无关：拿满 WIN_SCORE 分由 checkWinScore 单独处理，
+    //  不会走到这里。所以这里的「失败」只包括撞墙与被自己咬到两种。
+    // ================================================================
+    function endGame(message, result) {
+        if (gameOver) return;
+        gameOver = true;
+        paused = false;                        // 结束时取消暂停状态
+        updatePauseButton();
+        const outcome = result || 'fail';
+        winFlag = (outcome === 'full');       // 铺满算"圆满走完"，不是输
+        // 结束原因：既写进状态栏，也画在画布上，不用低头看
+        endReason = message;
+        statusTip.innerText = (outcome === 'fail' ? '💀 ' : '🎉 ') + message;
+
+        // 死亡反馈：闪一下红屏（铺满全盘是自然终点，不闪）
+        if (outcome === 'fail') spawnDeathEffect();
+
+        // 先记下这一局是不是 AI 打的，再清 aiMode：
+        // 下面 recordRound 要用它来标注模式，顺序反了战绩就会全记成"手动"。
+        const wasAI = aiMode;
+        if (aiMode) {
+            aiMode = false;
+            aiResult = outcome;
+            aiProgress.innerText = (outcome === 'fail') ? '❌ 结束' : '✅ 填满全盘';
+        }
+
+        if (score > highScore) {
+            highScore = score;
+            safeSet('snakeHighScore', String(highScore));
+            highScoreSpan.innerText = highScore;
+        }
+
+        // 记录本局战绩（无论胜负）
+        recordRound(outcome, message, wasAI);
+        drawCanvas();
+    }
+
+    // ================================================================
+    //  多局战绩（新增功能之一）
+    // ================================================================
+    function loadHistory() {
+        const raw = safeGet('snakeHistory');
+        if (!raw) { roundHistory = []; return; }
+        try {
+            const parsed = JSON.parse(raw);
+            roundHistory = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            roundHistory = [];
+        }
+    }
+
+    function saveHistory() {
+        safeSet('snakeHistory', JSON.stringify(roundHistory));
+    }
+
+    function recordRound(outcome, message, wasAI) {
+        roundHistory.push({
+            score: score,
+            mode: wasAI ? 'AI' : '手动',
+            result: outcome,                   // 'fail' | 'full'
+            won: outcome === 'full',           // 铺满全盘视为圆满走完
+            time: Date.now()
+        });
+        // 只保留最近 HISTORY_MAX 局：新的一局自动追加，超出则丢弃最旧的
+        if (roundHistory.length > HISTORY_MAX) {
+            roundHistory = roundHistory.slice(-HISTORY_MAX);
+        }
+        // 累计总局数：不受 HISTORY_MAX 限制，一直加上去
+        roundCount++;
+        safeSet('snakeRoundCount', String(roundCount));
+        updateRoundCountDisplay();
+        saveHistory();
+        renderHistory();
+    }
+
+    function renderHistory() {
+        historyList.innerHTML = '';
+        if (!roundHistory.length) {
+            historyEmpty.style.display = 'block';
+            return;
+        }
+        historyEmpty.style.display = 'none';
+
+        // 倒序展示：最新一局在最上面
+        const recent = roundHistory.slice(-HISTORY_MAX).reverse();
+        recent.forEach((item, i) => {
+            const li = document.createElement('li');
+            const index = roundHistory.length - i;
+            // 铺满全盘 → ✅（走完全程）；撞死 → 💀（手动）/ 🤖（AI 也撞死了）
+            const icon = item.won ? '✅' : (item.mode === 'AI' ? '🤖' : '💀');
+
+            const idxSpan = document.createElement('span');
+            idxSpan.className = 'h-index';
+            idxSpan.textContent = '#' + index;
+
+            const modeSpan = document.createElement('span');
+            modeSpan.className = 'h-mode';
+            modeSpan.textContent = item.mode;
+
+            const scoreSpan = document.createElement('span');
+            scoreSpan.className = 'h-score';
+            scoreSpan.textContent = icon + ' ' + item.score;
+
+            li.appendChild(idxSpan);
+            li.appendChild(modeSpan);
+            li.appendChild(scoreSpan);
+            historyList.appendChild(li);
+        });
+    }
+
+    // ================================================================
+    //  反馈效果：推进与生成
+    // ----------------------------------------------------------------
+    //  设计原则：只做"看得懂发生了什么"的最小集合，不加背景音、不加弹窗。
+    //    · 吃到食物 → 食物位置炸开小点 + 上浮「+1」
+    //    · 蛇死亡   → 整屏红色闪一下
+    //    · 暂停     → 画面盖一层并写明"已暂停"
+    //  这些都是纯视觉对象，过期自动丢弃，不影响任何游戏逻辑。
+    // ================================================================
+    function updateEffects() {
+        const now = Date.now();
+
+        particles = particles.filter(p => now - p.born < EFFECT_PARTICLE_LIFE);
+        for (const p of particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.06;          // 轻微下坠，看起来像迸溅
+        }
+
+        floaters = floaters.filter(f => now - f.born < EFFECT_FLOATER_LIFE);
+    }
+
+    function spawnEatEffects(cx, cy) {
+        const now = Date.now();
+        for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.5;
+            const sp = 0.8 + Math.random() * 1.4;
+            particles.push({
+                x: cx, y: cy,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp,
+                born: now,
+                hue: Math.random() < 0.5 ? '#2ecc71' : '#f1c40f'
+            });
+        }
+        floaters.push({ x: cx, y: cy, text: '+1', born: now, color: '#2ecc71' });
+    }
+
+    function spawnDeathEffect() {
+        deathFlashUntil = Date.now() + EFFECT_FLASH_LIFE;
+    }
+
+    function effectsReset() {
+        particles = [];
+        floaters = [];
+        deathFlashUntil = 0;
+    }
+
+    // ================================================================
+    //  绘制 Canvas
+    // ================================================================
+    function drawCanvas() {
+        const size = GRID_SIZE;
+        const cellSize = canvas.width / size;
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const now = Date.now();
+
+        // 蛇还没初始化时直接返回。
+        // 这不是可有可无的保险：applyTheme() 内部会调 drawCanvas()，而启动流程里
+        // applyTheme 曾经排在 initGame 之前，于是 snake 还是空数组就去读 snake[0].x，
+        // 抛 TypeError 把 bootstrap 整个打断 —— 表现为"首屏有食物但没有蛇、也不能玩"。
+        if (!snake.length) return;
+
+        ctx.fillStyle = isDark ? '#1a1a2e' : '#f8f9fa';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.strokeStyle = isDark ? '#2a3a5e' : '#e9ecef';
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= size; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * cellSize, 0);
+            ctx.lineTo(i * cellSize, canvas.height);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(0, i * cellSize);
+            ctx.lineTo(canvas.width, i * cellSize);
+            ctx.stroke();
+        }
+
+        // ---------- 食物：带呼吸感，便于一眼找到 ----------
+        const foodCx = food.x * cellSize + cellSize / 2;
+        const foodCy = food.y * cellSize + cellSize / 2;
+        const breathe = 1 + 0.10 * Math.sin(now / 260);
+        const foodColor = isDark ? '#f1c40f' : '#e74c3c';
+        ctx.fillStyle = foodColor;
+        ctx.shadowColor = foodColor;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(foodCx, foodCy, (cellSize / 2 - 3) * breathe, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // 中心高光，让食物更立体
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(foodCx - cellSize * 0.11, foodCy - cellSize * 0.11, cellSize * 0.11, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // ---------- 蛇身与蛇头共用同一个颜色公式 ----------
+        // 身体从尾到头渐亮；蛇头用与"紧邻头的那一节"完全相同的颜色，
+        // 不再单独调亮 —— 否则头会显得比身体浅、像贴上去的。
+        // 蛇头的辨识度改由**眼睛**承担（见下），不靠变浅或变大。
+        function bodyColor(t, dark) {
+            const shade = Math.round(150 + 40 * t);
+            return dark
+                ? 'rgb(' + Math.round(20 + 10 * t) + ',' + shade + ',' + Math.round(140 + 20 * t) + ')'
+                : 'rgb(' + Math.round(28 + 12 * t) + ',' + shade + ',' + Math.round(80 + 25 * t) + ')';
+        }
+
+        const len = snake.length;
+        for (let i = len - 1; i >= 1; i--) {
+            const seg = snake[i];
+            const x = seg.x * cellSize;
+            const y = seg.y * cellSize;
+            // t: 0(尾) → 1(紧邻头)
+            const t = len > 1 ? 1 - i / (len - 1) : 1;
+            ctx.fillStyle = bodyColor(t, isDark);
+            ctx.shadowColor = isDark ? '#1abc9c' : '#27ae60';
+            ctx.shadowBlur = i < 3 ? 7 : 3;
+            ctx.beginPath();
+            roundRectPath(ctx, x + 2.5, y + 2.5, cellSize - 5, cellSize - 5, 4);
+            ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+
+        // ---------- 蛇头 ----------
+        // 与身体的区别只有两点：同样的尺寸（不放大）、同样的颜色（不调浅），
+        // 加上较强光晕与两只朝行进方向的眼睛。
+        const head = snake[0];
+        const hx = head.x * cellSize;
+        const hy = head.y * cellSize;
+
+        ctx.fillStyle = bodyColor(1, isDark);
+        ctx.shadowColor = '#2ecc71';
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        roundRectPath(ctx, hx + 2.5, hy + 2.5, cellSize - 5, cellSize - 5, 4);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // 眼睛：按当前方向摆在头的两侧
+        const vec = DIR_VECTORS.find(v => v.name === direction) || { dx: 1, dy: 0 };
+        const cx = hx + cellSize / 2;
+        const cy = hy + cellSize / 2;
+        const off = cellSize * 0.21;      // 两眼横向间距的一半
+        const fwd = cellSize * 0.15;      // 眼睛相对于中心前移
+        const eyeR = Math.max(1.6, cellSize * 0.13);
+        // 与前进方向垂直的单位向量
+        const px = -vec.dy;
+        const py = vec.dx;
+        for (const s of [-1, 1]) {
+            const ex = cx + vec.dx * fwd + px * off * s;
+            const ey = cy + vec.dy * fwd + py * off * s;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(ex, ey, eyeR, 0, 2 * Math.PI);
+            ctx.fill();
+            // 瞳孔朝前，强化"它在往哪走"
+            ctx.fillStyle = '#10251a';
+            ctx.beginPath();
+            ctx.arc(ex + vec.dx * eyeR * 0.42, ey + vec.dy * eyeR * 0.42, eyeR * 0.52, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        // ---------- 粒子与上浮文字 ----------
+        for (const p of particles) {
+            const age = (now - p.born) / EFFECT_PARTICLE_LIFE;
+            ctx.globalAlpha = Math.max(0, 1 - age);
+            ctx.fillStyle = p.hue;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.max(0.7, cellSize * 0.11 * (1 - age)), 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        // ---------- 死亡闪屏：叠在蛇和粒子之上、结算覆盖层之下 ----------
+        if (deathFlashUntil > now) {
+            const k = (deathFlashUntil - now) / EFFECT_FLASH_LIFE;
+            ctx.fillStyle = 'rgba(231, 76, 60, ' + (0.45 * k).toFixed(3) + ')';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // ---------- 暂停覆盖层 ----------
+        // 胜利界面造成的暂停不画这一层：胜利界面本身就在提示玩家，
+        // 再叠一句"按空格或点「继续」恢复"会和它上面那两个按钮互相打架。
+        if (paused && !gameOver && !winPausedByBanner) {
+            ctx.fillStyle = 'rgba(0,0,0,0.45)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 30px "Segoe UI", sans-serif';
+            ctx.fillText('⏸️', canvas.width / 2, canvas.height / 2 - 22);
+            ctx.font = 'bold 20px "Segoe UI", sans-serif';
+            ctx.fillText('已暂停', canvas.width / 2, canvas.height / 2 + 14);
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.globalAlpha = 0.85;
+            ctx.fillText('按空格或点「继续」恢复', canvas.width / 2, canvas.height / 2 + 42);
+            ctx.globalAlpha = 1;
+        }
+
+        // ---------- 开局提示层 ----------
+        // 每局开始先停在这一屏，把"目标是什么、怎么操作"讲清楚再开始。
+        // 期间游戏逻辑不推进（roundPending 时不排 tick），所以这一层是静止的。
+        if (roundPending && !gameOver) {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+
+            // 半透明底 + 一层柔和的浅绿，和结束覆盖层的红/深色区分开
+            ctx.fillStyle = isDark ? 'rgba(10, 20, 16, 0.86)' : 'rgba(240, 250, 244, 0.94)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 标题
+            ctx.fillStyle = isDark ? '#e8f5ec' : '#12351f';
+            ctx.font = 'bold 26px "Segoe UI", sans-serif';
+            ctx.fillText('🎯 本局目标', cx, H / 2 - 96);
+
+            // 目标分数：这是整屏的重点，所以字号最大、用强调色
+            ctx.fillStyle = isDark ? '#57d98a' : '#1e8f4e';
+            ctx.font = 'bold 54px "Segoe UI", sans-serif';
+            ctx.fillText(WIN_SCORE + ' 分', cx, H / 2 - 40);
+
+            ctx.fillStyle = isDark ? '#b9c8bf' : '#3d5b4a';
+            ctx.font = '15px "Segoe UI", sans-serif';
+            ctx.fillText('吃到 ' + WIN_SCORE + ' 个食物就算赢', cx, H / 2 + 14);
+
+            // 操作说明
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.fillText('⬆️ ⬇️ ⬅️ ➡️  方向键移动', cx, H / 2 + 52);
+            ctx.fillText('空格键随时暂停 / 继续', cx, H / 2 + 76);
+
+            // 开始提示：带一点呼吸感，提示"这里可以点"
+            const breathe = 0.72 + 0.28 * Math.abs(Math.sin(now / 420));
+            ctx.globalAlpha = breathe;
+            ctx.fillStyle = isDark ? '#57d98a' : '#1e8f4e';
+            ctx.font = 'bold 17px "Segoe UI", sans-serif';
+            ctx.fillText('按空格键或点这里开始', cx, H / 2 + 126);
+            ctx.globalAlpha = 1;
+        }
+
+        // ---------- 胜利界面 ----------
+        // 达标时整屏庆祝，而不是只在画面下面露一条横幅 —— 横幅太容易被
+        // 当成普通提示忽略掉。这里只画展示内容，两个操作按钮留在 DOM 上
+        // （画在 canvas 里就得自己算点击命中，键盘和读屏也用不了）。
+        if (winScreenVisible && !gameOver) {
+            const W = canvas.width, H = canvas.height, cx = W / 2;
+
+            // 金色半透明底：和开局提示的浅绿、结束覆盖层的红/深色区分开
+            ctx.fillStyle = isDark ? 'rgba(30, 26, 8, 0.90)' : 'rgba(255, 250, 235, 0.95)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // 奖杯：轻微呼吸，别死板
+            const breathe = 1 + 0.07 * Math.sin(now / 300);
+            ctx.save();
+            ctx.translate(cx, H / 2 - 104);
+            ctx.scale(breathe, breathe);
+            ctx.font = '52px "Segoe UI", sans-serif';
+            ctx.fillText('🏆', 0, 0);
+            ctx.restore();
+
+            ctx.fillStyle = isDark ? '#ffd977' : '#b8860b';
+            ctx.font = 'bold 34px "Segoe UI", sans-serif';
+            ctx.fillText('胜利！', cx, H / 2 - 44);
+
+            ctx.fillStyle = isDark ? '#7fe3a4' : '#1e8f4e';
+            ctx.font = 'bold 20px "Segoe UI", sans-serif';
+            ctx.fillText('吃到了 ' + WIN_SCORE + ' 个食物', cx, H / 2 + 4);
+
+            // 三个小统计：横向排开，比堆成三行更好读
+            const stats = [
+                ['得分', String(score)],
+                ['蛇长', String(snake.length)],
+                ['步数', String(stepCount)]
+            ];
+            const gap = W / 3;
+            stats.forEach(function (s, i) {
+                const sx = gap * i + gap / 2;
+                ctx.fillStyle = isDark ? '#ffe9a8' : '#8a6d1f';
+                ctx.font = 'bold 22px "Segoe UI", sans-serif';
+                ctx.fillText(s[1], sx, H / 2 + 58);
+                ctx.fillStyle = isDark ? '#a99b73' : '#9c8c66';
+                ctx.font = '13px "Segoe UI", sans-serif';
+                ctx.fillText(s[0], sx, H / 2 + 84);
+            });
+
+            ctx.fillStyle = isDark ? '#c9bb92' : '#7d6f4d';
+            ctx.font = '15px "Segoe UI", sans-serif';
+            ctx.fillText('要继续玩下去，还是重新开一局？', cx, H / 2 + 128);
+        }
+
+        // ---------- 结束覆盖层 ----------
+        if (gameOver) {
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.font = 'bold 28px "Segoe UI", sans-serif';
+            ctx.fillText(winFlag ? '🎉' : '💀', canvas.width / 2, canvas.height / 2 - 10);
+            // 把结束原因也写在画面上，不用低头看状态栏
+            const label = endReason || (winFlag ? '填满全盘' : '游戏结束');
+            ctx.font = 'bold 16px "Segoe UI", sans-serif';
+            ctx.globalAlpha = 0.95;
+            ctx.fillText(label, canvas.width / 2, canvas.height / 2 + 26);
+            ctx.globalAlpha = 1;
+        }
+
+        // ---------- 上浮文字最后画，保证不被覆盖 ----------
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const f of floaters) {
+            const age = (now - f.born) / EFFECT_FLOATER_LIFE;
+            ctx.globalAlpha = Math.max(0, 1 - age);
+            ctx.fillStyle = f.color;
+            ctx.font = 'bold 16px "Segoe UI", sans-serif';
+            ctx.fillText(f.text, f.x, f.y - age * cellSize * 1.6);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    /**
+     * 圆角矩形路径。
+     * 注意：这里刻意不去改写 CanvasRenderingContext2D.prototype。
+     * 原实现用 `CanvasRenderingContext2D.prototype.roundRect = ...` 给所有
+     * canvas 打补丁，会覆盖浏览器原生的 roundRect，属于全局副作用；
+     * 改成普通函数后只在本文件内生效。
+     */
+    function roundRectPath(c, x, y, w, h, r) {
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+        c.moveTo(x + r, y);
+        c.lineTo(x + w - r, y);
+        c.quadraticCurveTo(x + w, y, x + w, y + r);
+        c.lineTo(x + w, y + h - r);
+        c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        c.lineTo(x + r, y + h);
+        c.quadraticCurveTo(x, y + h, x, y + h - r);
+        c.lineTo(x, y + r);
+        c.quadraticCurveTo(x, y, x + r, y);
+        c.closePath();
+    }
+
+    // ================================================================
+    //  分数与状态
+    // ================================================================
+    function updateScoreDisplay() {
+        scoreSpan.innerText = score;
+        if (score > highScore) {
+            highScore = score;
+            safeSet('snakeHighScore', String(highScore));
+        }
+        highScoreSpan.innerText = highScore;
+        updateRoundCountDisplay();
+    }
+
+    /**
+     * 刷新「局数」显示。
+     * 任务书的「计分制」验收标准要求记录 得分 / 最高分 / 局数 三项，
+     * 前两项原本就有，局数是一直缺的。
+     * 注意：这里显示的是**累计总局数**（跨局累加、刷新后保留），
+     * 和右侧战绩面板的"最近 10 局"是两件事。
+     */
+    function updateRoundCountDisplay() {
+        if (roundCountSpan) roundCountSpan.innerText = roundCount;
+    }
+
+    function clearStatus() {
+        statusTip.innerText = '⬆️⬇️⬅️➡️ 方向键控制';
+        aiProgress.innerText = '';
+    }
+
+    // ================================================================
+    //  开局提示界面
+    // ----------------------------------------------------------------
+    //  每局开始先停在提示屏上，讲清目标再开始。刻意做成"画面上的提示层 +
+    //  空格/点击开始"，而不是弹一个自动消失的 toast：玩家不会因为没看清
+    //  而错过目标，也不会在还没准备好时蛇就已经在动了。
+    // ================================================================
+    function showRoundPrompt() {
+        hideWinBanner();
+        stopLoop();               // 提示期间不排 tick，画面静止
+        roundPending = true;
+        paused = false;           // 提示≠暂停，避免暂停按钮显示成"继续"
+        updatePauseButton();
+        clearStatus();
+        drawCanvas();
+        statusTip.innerText = '🎯 目标是吃到 ' + WIN_SCORE + ' 分 —— 按空格或点画面开始';
+    }
+
+    function beginRound() {
+        if (!roundPending) return;
+        roundPending = false;
+        startLoop();
+        clearStatus();
+        drawCanvas();
+    }
+
+    /** 重置并停在开局提示上（「重新开始」与开局走这条路）。 */
+    function startNewRoundWithPrompt() {
+        resetGame();
+        showRoundPrompt();
+    }
+
+    // ================================================================
+    //  达标（拿到 WIN_SCORE 分）
+    // ----------------------------------------------------------------
+    //  达到 WIN_SCORE 时**不自动结算**，而是弹出胜利界面让玩家自己决定：
+    //    · 继续玩 —— 分数与蛇原样保留，接着玩下去（界面不再重复弹）
+    //    · 重新开始 —— 回到开局提示，开新一局
+    //  界面出现时把游戏停住（复用暂停那套 stopLoop），否则玩家还没看完
+    //  说明，蛇就已经撞死了。
+    // ================================================================
+    function showWinBanner() {
+        // 展示内容（奖杯、得分、蛇长、步数）画在画布的胜利界面上，
+        // 这里只负责让那两个操作按钮出现。
+        // winScreenVisible 与 winShown 是两件事：后者是"本局已弹过"，
+        // 会一直保持 true；前者是"此刻正在显示"，点「继续玩」后要关掉，
+        // 否则胜利界面会一直盖在画面上。
+        winScreenVisible = true;
+        winBanner.classList.add('show');
+
+        // 清掉吃食物留下的粒子与「+1」上浮文字：它们会飘在胜利界面上面，
+        // 像多余的残影（实测奖杯上会叠一个 +1）。
+        particles = [];
+        floaters = [];
+
+        // 停住游戏，等玩家选择。记下"是它停的"，这样"继续玩"之后
+        // 不会把用户自己按下的暂停给解开。
+        if (!gameOver && !paused) {
+            paused = true;
+            winPausedByBanner = true;
+            stopLoop();
+            updatePauseButton();
+        }
+        // 无论是否新暂停，都重绘一次 —— winShown 已置位，胜利界面才会画出来
+        drawCanvas();
+    }
+
+    function hideWinBanner() {
+        winScreenVisible = false;
+        winBanner.classList.remove('show');
+    }
+
+    /**
+     * 吃到一个食物后调用：首次达到 WIN_SCORE 就弹胜利界面。
+     * 只在 aiMode 为假时弹 —— AI 演示是要一路填满全盘的，
+     * 中途停下来等点击会打断演示。
+     */
+    function checkWinScore() {
+        if (winShown) return;
+        if (score < WIN_SCORE) return;
+        winShown = true;
+        if (aiMode) return;          // AI 演示不打断
+        if (roundPending) return;    // 还没开始就不可能达标，纯属防御
+        showWinBanner();
+    }
+
+    function continuePlaying() {
+        hideWinBanner();
+        if (winPausedByBanner) {
+            winPausedByBanner = false;
+            paused = false;
+            updatePauseButton();
+            startLoop();
+        }
+        statusTip.innerText = '▶️ 继续游戏，看看还能拿多少分';
+        drawCanvas();
+    }
+
+    function restartFromBanner() {
+        hideWinBanner();
+        winPausedByBanner = false;
+        startNewRoundWithPrompt();   // 同样先停在开局提示上
+    }
+
+    // ================================================================
+    //  游戏循环控制
+    // ----------------------------------------------------------------
+    //  固定节奏：每 tick 只走 1 步，两种情况各用一个固定间隔——
+    //  手动模式用 TICK_INTERVAL，AI 模式用 AI_TICK_INTERVAL。
+    //
+    //  这里刻意**不做**按进度自动提速：之前为了在合理时间内铺满全盘，
+    //  曾让 AI 随已吃食物数从 1 步/帧一路加到 60 步/帧，但那样后期快到
+    //  看不清过程，反而失去了"看 AI 怎么玩"的意义。现在 AI 是匀速的，
+    //  全程都能看清。
+    //
+    //  仍然用 setTimeout 自调度而不是 setInterval：一是两种模式的间隔可以
+    //  在同一处决定，不必在切换模式时推倒重建定时器；二是暂停时要能干净地
+    //  停掉、恢复时接着走。
+    // ================================================================
+    function tickDelay() {
+        return aiMode ? AI_TICK_INTERVAL : TICK_INTERVAL;
+    }
+
+    function scheduleTick() {
+        gameLoopTimer = setTimeout(function () {
+            if (gameOver || paused) return;   // 暂停时不再排下一帧，等于冻结
+            moveSnake();
+            if (!gameOver && !paused) scheduleTick();
+        }, tickDelay());
+    }
+
+    function stopLoop() {
+        if (gameLoopTimer) {
+            clearTimeout(gameLoopTimer);
+            gameLoopTimer = null;
+        }
+    }
+
+    function startLoop() {
+        stopLoop();
+        scheduleTick();
+    }
+
+    // ================================================================
+    //  动画帧循环（与游戏逻辑解耦）
+    // ----------------------------------------------------------------
+    //  游戏逻辑由上面的 tick 驱动，画面则由这个固定 30fps 的循环刷新。
+    //  拆开的原因：粒子、上浮文字、"已暂停"覆盖层、"游戏结束"覆盖层都需要
+    //  **独立于游戏节奏**地动或显示——比如暂停时游戏已经停摆，但画面还得
+    //  把覆盖层画出来；结束时死亡闪屏也要能自己闪完。
+    //  游戏逻辑本身完全不依赖这个循环，所以在无头测试里它跑不跑都无所谓。
+    // ================================================================
+    function startAnim() {
+        if (animTimer) clearInterval(animTimer);
+        animTimer = setInterval(function () {
+            updateEffects();
+            drawCanvas();
+        }, 33);
+    }
+
+    // ================================================================
+    //  暂停 / 结束本局
+    // ================================================================
+    //  暂停：直接停掉游戏定时器，恢复时重新起；画面由动画循环照常刷新，
+    //        所以能看到"已暂停"覆盖层。暂停不影响任何状态，可以无限次。
+    //  结束本局：等价于蛇死亡——走正常的 endGame('fail') 流程，
+    //        因此最高分、战绩、AI 进度等收尾逻辑和撞死完全一致。
+    // ================================================================
+    function updatePauseButton() {
+        if (!pauseBtn) return;
+        if (paused) {
+            pauseBtn.innerText = '▶️ 继续';
+            pauseBtn.classList.add('is-paused');
+        } else {
+            pauseBtn.innerText = '⏸️ 暂停';
+            pauseBtn.classList.remove('is-paused');
+        }
+    }
+
+    function togglePause() {
+        if (gameOver) return;         // 已结束就没有暂停可言
+        paused = !paused;
+        if (paused) {
+            stopLoop();
+            statusTip.innerText = '⏸️ 已暂停 —— 按空格或点「继续」恢复';
+        } else {
+            startLoop();
+            statusTip.innerText = aiMode
+                ? '🤖 AI 自动操作中（无需任何键盘输入）...'
+                : '⬆️⬇️⬅️➡️ 方向键控制';
+        }
+        updatePauseButton();
+        drawCanvas();
+    }
+
+    function finishRound() {
+        if (gameOver) return;
+        endGame('你手动结束了本局', 'fail');
+    }
+
+    // ================================================================
+    //  键盘事件（仅手动模式有效，空格始终可暂停）
+    // ================================================================
+    document.addEventListener('keydown', (e) => {
+        const key = e.key;
+
+        // 空格：暂停/继续。放在最前面，且不受"AI 接管"影响——
+        // AI 跑起来之后更需要能随时按下暂停。
+        if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
+            e.preventDefault();
+            // 开局提示期间，空格的含义是"开始"而不是"暂停"
+            if (roundPending) {
+                if (!e.repeat) beginRound();
+                return;
+            }
+            if (!e.repeat) togglePause();   // 按住不放只触发一次
+            return;
+        }
+
+        if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) {
+            e.preventDefault();
+        }
+        if (gameOver || aiMode) return;   // AI 接管或已结束时忽略方向键
+        if (roundPending) return;         // 还没开始，转向没有意义
+        // 暂停时不接受转向：否则恢复后会看到一个"多出来"的转向
+        if (paused) return;
+
+        switch (key) {
+            case 'ArrowUp':    if (direction !== 'down')  nextDirection = 'up'; break;
+            case 'ArrowDown':  if (direction !== 'up')    nextDirection = 'down'; break;
+            case 'ArrowLeft':  if (direction !== 'right') nextDirection = 'left'; break;
+            case 'ArrowRight': if (direction !== 'left')  nextDirection = 'right'; break;
+            default: return;
+        }
+    });
+
+    // 开局提示上写着"点这里开始"，所以点画面也要能开始
+    canvas.addEventListener('click', () => {
+        if (roundPending) beginRound();
+    });
+    // 提示层是"点画面开始"，给鼠标用户一个明确的可点光标
+    canvas.addEventListener('mousemove', () => {
+        canvas.style.cursor = roundPending ? 'pointer' : 'default';
+    });
+
+    // ================================================================
+    //  AI 按钮逻辑
+    // ================================================================
+    function startAI() {
+        if (aiMode) return;
+        // 开一局干净的，然后交给 AI（initGame 已把 paused 复位并刷新按钮）
+        initGame();
+        roundPending = false;      // AI 演示不经过开局提示，直接跑
+        aiMode = true;
+        aiResult = null;
+        foodEatenCount = 0;
+        statusTip.innerText = '🤖 AI 自动操作中（无需任何键盘输入）...';
+        // 只报已吃数量，不设上限：这局会一直玩到铺满全盘为止
+        aiProgress.innerText = '🍽️ 0';
+        startLoop();
+        moveSnake();
+    }
+
+    document.getElementById('aiBtn').addEventListener('click', () => {
+        startAI();
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+        togglePause();
+    });
+
+    document.getElementById('endBtn').addEventListener('click', () => {
+        finishRound();
+    });
+
+    // 胜利界面上的两个选择
+    document.getElementById('continueBtn').addEventListener('click', () => {
+        continuePlaying();
+    });
+
+    document.getElementById('restartFromWinBtn').addEventListener('click', () => {
+        restartFromBanner();
+    });
+
+    // ================================================================
+    //  主题切换（新增功能之一：至少 2 套配色，切换即时生效，刷新保留）
+    // ================================================================
+    function applyTheme(theme) {
+        currentTheme = theme;
+        safeSet('snakeTheme', theme);
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+        // 启动时 applyTheme 会在 initGame 之前被调用，那时 snake 还是空的。
+        // drawCanvas 本身已经能安全返回，这里再判一次是为了把意图写明白：
+        // 设置主题不必强制重绘，真正需要重绘的是"用户点主题按钮"这条路径。
+        if (snake.length) drawCanvas();
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+        applyTheme(currentTheme === 'light' ? 'dark' : 'light');
+    });
+
+    // ================================================================
+    //  重启按钮
+    // ================================================================
+    document.getElementById('restartBtn').addEventListener('click', () => {
+        startNewRoundWithPrompt();
+    });
+
+    // ================================================================
+    //  启动
+    // ================================================================
+    function bootstrap() {
+        highScore = parseInt(safeGet('snakeHighScore') || '0', 10) || 0;
+        highScoreSpan.innerText = highScore;
+
+        loadHistory();
+        renderHistory();
+
+        // 累计局数：与最高分同样对待，从 localStorage 读回来
+        roundCount = parseInt(safeGet('snakeRoundCount') || '0', 10) || 0;
+        updateRoundCountDisplay();
+
+        // 顺序要紧：先 applyTheme 把 data-theme 属性设好（它内部不再重绘，
+        // 而且此刻还没有蛇），再 initGame() —— initGame 结尾会 drawCanvas()，
+        // 那时主题已经正确、蛇也已经就位。早先的写法是 initGame 在 applyTheme
+        // 之后，而 applyTheme 会立刻重绘，导致空蛇被绘制并抛错、打断整个启动。
+        applyTheme(safeGet('snakeTheme') === 'dark' ? 'dark' : 'light');
+
+        initGame();
+        assertCycleRoute();   // 自检：回路常量与初始蛇形是否自洽
+
+        // 首个动画循环要先起来：开局提示层上的"按空格开始"有呼吸效果，
+        // 而此刻游戏逻辑循环（startLoop）是**故意不启动**的。
+        startAnim();
+
+        // 开局停在提示界面上，按空格或点画面才开始。startLoop 由 beginRound() 负责。
+        showRoundPrompt();
+    }
+
+    window.onload = bootstrap;
+</script>
+</body>
+</html>

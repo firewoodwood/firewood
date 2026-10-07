@@ -220,6 +220,15 @@
             box-shadow: 0 0 0 3px rgba(243, 156, 18, 0.35);
         }
 
+        /* 暂停键在"没有对局可暂停"的时候藏起来：
+             ① 刚点进来 / 停在开局提示上（还没开始，没有可暂停的东西）
+             ② 本局结束之后（死亡或填满全盘，也没有可暂停的东西）
+           用 display:none 而不是 visibility:hidden —— 后者仍占着位置，
+           会在按钮行里留一个空档。 */
+        .btn.is-hidden {
+            display: none;
+        }
+
         .status-area {
             display: flex;
             justify-content: space-between;
@@ -257,21 +266,17 @@
            展示内容（奖杯、得分、蛇长、步数）画在画布的胜利界面上，
            这里只放两个按钮：玩家要能自己选"继续玩"还是"重新开始"。
            用真实按钮而不是画在 canvas 上，键盘和读屏才都能用。 */
+        /* 胜利提示：和工具栏里其它按钮排在同一行，所以做成按钮尺寸的胶囊，
+           而不是原来那种整条横幅（它现在跟着「重新开始」一起横排）。 */
         .win-banner {
             display: none;              /* 默认隐藏，达标时由 JS 显示 */
-            margin-top: 16px;
-            padding: 12px 18px;
-            border-radius: 16px;
+            align-items: center;
+            padding: 3px;
+            border-radius: 12px;
             border: 2px solid #f1c40f;
-            background: rgba(241, 196, 15, 0.14);
+            background: rgba(241, 196, 15, 0.20);
         }
-        .win-banner.show { display: block; }
-        .win-banner .win-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
+        .win-banner.show { display: flex; }
         .btn-continue {
             background: #2ecc71;
             box-shadow: 0 4px 12px rgba(46, 204, 113, 0.35);
@@ -312,6 +317,13 @@
         <div class="toolbar">
             <button class="btn" id="pauseBtn">⏸️ 暂停</button>
             <button class="btn" id="restartBtn">🔄 重新开始</button>
+            <!-- 胜利提示：就摆在「重新开始」右边。
+                 达标时整条亮起来，玩家一眼看到"胜利 + 继续玩"，而
+                 「重新开始」就在紧挨着的左边，两个选择在同一行里。
+                 展示内容（奖杯 / 得分 / 蛇长 / 步数）画在画布上，这里只有按钮。 -->
+            <div class="win-banner" id="winBanner" role="status" aria-live="polite">
+                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 继续玩</button>
+            </div>
             <button class="btn btn-ai" id="aiBtn">🤖 AI自动玩</button>
             <button class="btn btn-danger" id="endBtn">💀 结束本局</button>
             <button class="btn btn-theme" id="themeToggle">🌓 主题</button>
@@ -325,14 +337,6 @@
         <div class="hint">
             最高分、主题、战绩均自动保存 ·
             <a href="../index.html">返回个人主页</a>
-        </div>
-
-        <!-- 胜利后的操作区：展示内容画在画布上，这里只放两个按钮 -->
-        <div class="win-banner" id="winBanner" role="status" aria-live="polite">
-            <div class="win-actions">
-                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 继续玩</button>
-                <button class="btn" id="restartFromWinBtn" type="button">🔄 重新开始</button>
-            </div>
         </div>
     </div>
 
@@ -360,8 +364,7 @@
     // 只触发一次（重开或换局才复位），否则每吃一个食物都会再弹一次，很烦。
     const WIN_SCORE = 15;
     const HISTORY_MAX = 10;             // 战绩最多保留局数
-    const EFFECT_PARTICLE_LIFE = 620;   // 粒子寿命(ms)
-    const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
+        const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
     const EFFECT_FLASH_LIFE = 320;      // 死亡闪屏时长(ms)
 
     const canvas = document.getElementById('gameCanvas');
@@ -375,6 +378,9 @@
     const historyList = document.getElementById('historyList');
     const historyEmpty = document.getElementById('historyEmpty');
     const pauseBtn = document.getElementById('pauseBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const endBtn = document.getElementById('endBtn');
+    const aiBtn = document.getElementById('aiBtn');
 
     // ---------- 游戏状态 ----------
     let snake = [];
@@ -393,10 +399,9 @@
     let endReason = null;            // 最近一次结束的原因，供画面/提示使用
 
     // ---------- 反馈效果数据 ----------
-    // 都是纯视觉的短生命周期对象，每帧在 updateEffects() 里推进、过期即丢弃。
+    // 纯视觉的短生命周期对象，每帧在 updateEffects() 里推进、过期即丢弃。
     // 用 Date.now() 当时间基准：AI 模式一帧可能走多步（这里现在是 1 步），
     // 用时间而不是帧数计算寿命，动画时长才不会随速度变化。
-    let particles = [];              // 吃食物时炸开的小点
     let floaters = [];               // 上浮并淡出的文字，如 "+1"
     let deathFlashUntil = 0;         // 死亡闪屏的截止时间戳
 
@@ -409,6 +414,26 @@
     let winShown = false;            // 本局是否已经弹过达标界面（每局只弹一次）
     let winScreenVisible = false;    // 胜利界面此刻是否显示在画面上
     let winPausedByBanner = false;   // 界面是不是把游戏停住了（用于"继续玩"时恢复）
+
+    // ---------- "本局是否真在进行中" ----------
+    //  与 roundPending / gameOver 不是一回事：
+    //    roundPending 是"停在开局提示上，还没开始"
+    //    gameOver     是"已经结束"
+    //    roundInProgress 才是"确实开出去了一局、还没收尾"
+    //  用途：① 决定「重新开始」「结束本局」显不显示
+    //        ② 判断从工具栏点「重新开始」时该不该把这一局记进战绩 ——
+    //           停在开局提示上点它不该记（那一局根本没开始），
+    //           玩到一半点它才该记。
+    let roundInProgress = false;
+
+    // ---------- 恢复前的倒计时 ----------
+    //  从"暂停"或"胜利界面"切回游戏时，先给 3 秒缓冲再开始跑。
+    //  理由：切回来那一瞬间玩家的手指还在原来的位置，蛇立刻动很容易直接撞死；
+    //  倒计时期间画面静止、数字在跳，玩家能看清还剩多久。
+    //  期间空格（暂停）与方向键都**不响应** —— 否则倒计时就失去意义了。
+    let countdownEndsAt = 0;         // 倒计时结束的时间戳（0 表示没有在倒计时）
+    let countdownShownDigit = 0;     // 上一帧显示的数字，用于驱动状态栏文案
+    const COUNTDOWN_MS = 3000;       // 3 秒
 
     // ---------- 开局提示界面 ----------
     // 含义反过来写更省事：roundPending 为 true 表示"这一局还没开始，
@@ -467,6 +492,7 @@
         stepCount = 0;
         gameOver = false;
         winFlag = false;
+        roundInProgress = false;   // 新一局还没开始跑，等 beginRound / startAI 置位
         aiMode = false;
         aiResult = null;
         foodEatenCount = 0;
@@ -605,7 +631,9 @@
                 safeSet('snakeHighScore', String(highScore));
             }
             updateScoreDisplay();
-            // 反馈：在食物原位置炸开小点、浮出「+1」
+            // 反馈：在食物原来那一格浮出一个「+1」，向上飘并淡出。
+            // 这里原来还会炸开一圈小点（粒子），按学生要求去掉了 —— 吃食物不再有
+            // 那种"啪一下散开"的画面变化，只留这个数字提示。
             spawnEatEffects(
                 food.x * cellSize + cellSize / 2,
                 food.y * cellSize + cellSize / 2
@@ -991,9 +1019,16 @@
     //  result 与胜利无关：拿满 WIN_SCORE 分由 checkWinScore 单独处理，
     //  不会走到这里。所以这里的「失败」只包括撞墙与被自己咬到两种。
     // ================================================================
-    function endGame(message, result) {
+    /**
+     * @param message  结束原因（写进状态栏与画面）
+     * @param result   'fail'（撞死 / 玩家叫停）| 'full'（铺满全盘）
+     * @param userEnded 是否由玩家主动叫停（结束本局 / 玩到一半重开），
+     *                  只影响战绩里的图标，不影响任何收尾逻辑
+     */
+    function endGame(message, result, userEnded) {
         if (gameOver) return;
         gameOver = true;
+        roundInProgress = false;               // 本局收尾了
         paused = false;                        // 结束时取消暂停状态
         updatePauseButton();
         const outcome = result || 'fail';
@@ -1021,7 +1056,7 @@
         }
 
         // 记录本局战绩（无论胜负）
-        recordRound(outcome, message, wasAI);
+        recordRound(outcome, message, wasAI, !!userEnded);
         drawCanvas();
     }
 
@@ -1043,11 +1078,15 @@
         safeSet('snakeHistory', JSON.stringify(roundHistory));
     }
 
-    function recordRound(outcome, message, wasAI) {
+    function recordRound(outcome, message, wasAI, userEnded) {
         roundHistory.push({
             score: score,
             mode: wasAI ? 'AI' : '手动',
-            result: outcome,                   // 'fail' | 'full'
+            // outcome：'fail'（撞死 / 玩家叫停）| 'full'（铺满全盘）
+            result: outcome,
+            // 玩家主动叫停（结束本局 / 玩到一半重开）时标成 'restart'，
+            // 只用于在战绩列表里换个图标（🔄），语义上仍属于 fail
+            endedByUser: !!userEnded,
             won: outcome === 'full',           // 铺满全盘视为圆满走完
             time: Date.now()
         });
@@ -1076,8 +1115,21 @@
         recent.forEach((item, i) => {
             const li = document.createElement('li');
             const index = roundHistory.length - i;
-            // 铺满全盘 → ✅（走完全程）；撞死 → 💀（手动）/ 🤖（AI 也撞死了）
-            const icon = item.won ? '✅' : (item.mode === 'AI' ? '🤖' : '💀');
+            // 图标规则：
+            //   铺满全盘（round 走完）        -> ✅
+            //   手动结束本局 / 玩到一半重开   -> 🔄（这两种都是玩家自己叫停的）
+            //   撞死（手动）                  -> 💀
+            //   撞死（AI）                    -> 🤖
+            const icon = item.won ? '✅'
+                : (item.endedByUser ? '🔄'
+                    : (item.mode === 'AI' ? '🤖' : '💀'));
+
+            // 奖杯：**手动**打到 WIN_SCORE 分及以上才加，跟在成绩图标右边。
+            // 它跟上面那个图标是两件事 —— 后者说"这局怎么结束的"，奖杯说
+            // "这局打到了达标线"，所以两个都留着，比如「🔄🏆 15」。
+            // AI 不加：AI 那条路线本来就会一路吃到铺满全盘，局局都有奖杯，
+            // 反而看不出哪一局值得夸。
+            const trophy = (item.mode !== 'AI' && item.score >= WIN_SCORE) ? '🏆' : '';
 
             const idxSpan = document.createElement('span');
             idxSpan.className = 'h-index';
@@ -1089,7 +1141,7 @@
 
             const scoreSpan = document.createElement('span');
             scoreSpan.className = 'h-score';
-            scoreSpan.textContent = icon + ' ' + item.score;
+            scoreSpan.textContent = icon + trophy + ' ' + item.score;
 
             li.appendChild(idxSpan);
             li.appendChild(modeSpan);
@@ -1110,30 +1162,17 @@
     function updateEffects() {
         const now = Date.now();
 
-        particles = particles.filter(p => now - p.born < EFFECT_PARTICLE_LIFE);
-        for (const p of particles) {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.06;          // 轻微下坠，看起来像迸溅
-        }
-
         floaters = floaters.filter(f => now - f.born < EFFECT_FLOATER_LIFE);
     }
 
+    /**
+     * 吃到食物时的画面反馈：在食物原来那一格浮出一个「+1」，向上飘并淡出。
+     *
+     * 这里原来还会炸开一圈小点（粒子），按学生要求去掉了 —— 吃食物不再有
+     * 那种"啪一下散开"的视觉变化，只留这个数字提示（它属于分数反馈）。
+     */
     function spawnEatEffects(cx, cy) {
-        const now = Date.now();
-        for (let i = 0; i < 8; i++) {
-            const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.5;
-            const sp = 0.8 + Math.random() * 1.4;
-            particles.push({
-                x: cx, y: cy,
-                vx: Math.cos(a) * sp,
-                vy: Math.sin(a) * sp,
-                born: now,
-                hue: Math.random() < 0.5 ? '#2ecc71' : '#f1c40f'
-            });
-        }
-        floaters.push({ x: cx, y: cy, text: '+1', born: now, color: '#2ecc71' });
+        floaters.push({ x: cx, y: cy, text: '+1', born: Date.now(), color: '#2ecc71' });
     }
 
     function spawnDeathEffect() {
@@ -1141,7 +1180,6 @@
     }
 
     function effectsReset() {
-        particles = [];
         floaters = [];
         deathFlashUntil = 0;
     }
@@ -1261,18 +1299,7 @@
             ctx.fill();
         }
 
-        // ---------- 粒子与上浮文字 ----------
-        for (const p of particles) {
-            const age = (now - p.born) / EFFECT_PARTICLE_LIFE;
-            ctx.globalAlpha = Math.max(0, 1 - age);
-            ctx.fillStyle = p.hue;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, Math.max(0.7, cellSize * 0.11 * (1 - age)), 0, 2 * Math.PI);
-            ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-
-        // ---------- 死亡闪屏：叠在蛇和粒子之上、结算覆盖层之下 ----------
+        // ---------- 死亡闪屏：叠在蛇之上、结算覆盖层之下 ----------
         if (deathFlashUntil > now) {
             const k = (deathFlashUntil - now) / EFFECT_FLASH_LIFE;
             ctx.fillStyle = 'rgba(231, 76, 60, ' + (0.45 * k).toFixed(3) + ')';
@@ -1282,7 +1309,9 @@
         // ---------- 暂停覆盖层 ----------
         // 胜利界面造成的暂停不画这一层：胜利界面本身就在提示玩家，
         // 再叠一句"按空格或点「继续」恢复"会和它上面那两个按钮互相打架。
-        if (paused && !gameOver && !winPausedByBanner) {
+        // 倒计时期间也不画：那时 paused 同样是 true，但它自己有倒计时那一层，
+        // 两层文字叠在一起会糊成一片（截图确认过）。
+        if (paused && !gameOver && !winPausedByBanner && !countdownActive()) {
             ctx.fillStyle = 'rgba(0,0,0,0.45)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#ffffff';
@@ -1295,6 +1324,41 @@
             ctx.font = '14px "Segoe UI", sans-serif';
             ctx.globalAlpha = 0.85;
             ctx.fillText('按空格或点「继续」恢复', canvas.width / 2, canvas.height / 2 + 42);
+            ctx.globalAlpha = 1;
+        }
+
+        // ---------- 恢复前倒计时 ----------
+        // 画在暂停覆盖层**之后**：倒计时期间 paused 也是 true，若不盖住它，
+        // 玩家会看到"已暂停"叠着"3"，两句提示互相打架。
+        // 只画数字和一句短提示，不做整屏不透明底 —— 让玩家先看清盘面。
+        if (countdownActive() && !gameOver) {
+            const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
+            const leftMs = countdownEndsAt - now;
+            const digit = Math.max(1, Math.ceil(leftMs / 1000));
+
+            // 数字切换时轻轻放大一下，让"在倒计时"这件事更明显
+            const frac = 1 - (leftMs % 1000) / 1000;          // 0 -> 1
+            const scale = 1 + 0.12 * Math.sin(frac * Math.PI);
+
+            ctx.fillStyle = 'rgba(0,0,0,0.34)';
+            ctx.fillRect(0, 0, W, H);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            ctx.save();
+            ctx.translate(cx, cy - 6);
+            ctx.scale(scale, scale);
+            ctx.fillStyle = isDark ? '#7fe3a4' : '#ffffff';
+            ctx.font = 'bold 68px "Segoe UI", sans-serif';
+            ctx.fillText(String(digit), 0, 0);
+            ctx.restore();
+
+            ctx.fillStyle = isDark ? '#cfe8d8' : 'rgba(255,255,255,0.92)';
+            ctx.font = '15px "Segoe UI", sans-serif';
+            ctx.fillText('准备开始…', cx, cy + 56);
+            ctx.font = '13px "Segoe UI", sans-serif';
+            ctx.globalAlpha = 0.8;
+            ctx.fillText('倒计时期间暂停与转向不响应', cx, cy + 78);
             ctx.globalAlpha = 1;
         }
 
@@ -1494,6 +1558,8 @@
     function beginRound() {
         if (!roundPending) return;
         roundPending = false;
+        roundInProgress = true;  // 这一局真的开出去了（从工具栏点「重新开始」时据此记战绩）
+        updatePauseButton();     // 开局了：暂停与「结束本局」出现（「重新开始」此间隐藏）
         startLoop();
         clearStatus();
         drawCanvas();
@@ -1523,17 +1589,24 @@
         winScreenVisible = true;
         winBanner.classList.add('show');
 
-        // 清掉吃食物留下的粒子与「+1」上浮文字：它们会飘在胜利界面上面，
+        // 清掉吃食物留下的「+1」上浮文字：它会飘在胜利界面上面，
         // 像多余的残影（实测奖杯上会叠一个 +1）。
-        particles = [];
         floaters = [];
 
-        // 停住游戏，等玩家选择。记下"是它停的"，这样"继续玩"之后
-        // 不会把用户自己按下的暂停给解开。
-        if (!gameOver && !paused) {
+        // 停住游戏，等玩家选择。
+        //
+        // 这里**无条件**把 winPausedByBanner 置为 true，不能写成"只有原本没暂停
+        // 才置位"。原因是玩家可能**先按了暂停、再吃到第 15 分**：那种情况下
+        // paused 本来就 true，若按条件跳过赋值，winPausedByBanner 会留在 false，
+        // 于是点「继续玩」时 continuePlaying 里 `if (winPausedByBanner)` 不成立、
+        // 不恢复游戏 —— 画面上的「已暂停」覆盖层就一直留着，看起来像
+        // "胜利界面没消失"。实测复现过这条路径。
+        //
+        // 语义上也该如此：「继续玩」意思是继续这一局，不管暂停是谁按的。
+        if (!gameOver) {
+            if (!paused) stopLoop();
             paused = true;
             winPausedByBanner = true;
-            stopLoop();
             updatePauseButton();
         }
         // 无论是否新暂停，都重绘一次 —— winShown 已置位，胜利界面才会画出来
@@ -1543,6 +1616,11 @@
     function hideWinBanner() {
         winScreenVisible = false;
         winBanner.classList.remove('show');
+        // 关掉胜利界面意味着离"回到一局进行中的游戏"不远了：这里先把暂停键
+        // 恢复显示。「重新开始」那条路径随后会走 showRoundPrompt()，它会再
+        // 把按钮藏起来；「继续玩」则直接进入倒计时，按钮应当可见。
+        // 放在这里而不是只放 continuePlaying()，是为了两条路径都不用各自补一遍。
+        updatePauseButton();
     }
 
     /**
@@ -1563,10 +1641,15 @@
         hideWinBanner();
         if (winPausedByBanner) {
             winPausedByBanner = false;
-            paused = false;
-            updatePauseButton();
-            startLoop();
+            // 不走"立即恢复"，而是先给 3 秒倒计时 —— 玩家刚点完按钮，
+            // 手还没回到方向键上，蛇立刻动很容易一上来就撞死。
+            startCountdown();
+            return;
         }
+        // 没有因为界面停住（理论上不该走到这里）：照旧直接恢复
+        paused = false;
+        updatePauseButton();
+        startLoop();
         statusTip.innerText = '▶️ 继续游戏，看看还能拿多少分';
         drawCanvas();
     }
@@ -1628,6 +1711,9 @@
     function startAnim() {
         if (animTimer) clearInterval(animTimer);
         animTimer = setInterval(function () {
+            // 动画循环是页面上唯一"始终在跑"的定时器，所以把倒计时的推进
+            // 挂在这里：暂停时逻辑定时器是停的，只有这里还能每帧跑。
+            updateCountdown();
             updateEffects();
             drawCanvas();
         }, 33);
@@ -1641,8 +1727,39 @@
     //  结束本局：等价于蛇死亡——走正常的 endGame('fail') 流程，
     //        因此最高分、战绩、AI 进度等收尾逻辑和撞死完全一致。
     // ================================================================
+    /**
+     * 刷新工具栏上与"对局状态"有关的按钮：暂停 / 结束本局 / AI自动玩 / 重新开始。
+     *
+     * 规则按状态分，每个按钮各不相同：
+     *
+     *   状态          暂停   结束本局  AI自动玩  重新开始
+     *   ────────────────────────────────────────────────
+     *   开局提示      隐藏    隐藏      显示      隐藏
+     *   手动游玩中    显示    显示      隐藏      隐藏
+     *   AI 游玩中     显示    显示      隐藏      隐藏
+     *   暂停 / 倒计时 显示    显示      显示      隐藏
+     *   胜利界面      隐藏    隐藏      隐藏      显示   ← 工具栏只留「重新开始」
+     *   本局结束      隐藏    隐藏      显示      显示
+     *
+     * 几处取舍：
+     *  · **胜利界面期间工具栏只留「重新开始」**（横幅里则是「继续玩 / 返回」）：
+     *    此刻工具栏再摆一排按钮会让人犹豫点哪个；留下「重新开始」是因为它是
+     *    这时候最自然的下一步 —— 玩家不必先"返回"再重开。
+     *  · 「AI自动玩」只在**没有对局在跑、且不在胜利界面**时出现（开局提示、
+     *    暂停中、本局结束）。手动玩的时候点它会把当前这局直接顶掉，属于危险
+     *    操作；AI 已经在跑时它更是彻底没用（处理函数开头就是 `if (aiMode) return;`）。
+     *  · 游玩中不放「重新开始」：那一局还在跑，旁边常年摆一个"重新开始"很容易
+     *    误触；真要走就点「结束本局」—— 它同样会把这一局记进战绩。
+     *  · 结束之后反过来：已经没什么可"结束"的了，这时才出现「重新开始」；
+     *    同时把暂停键收起来 —— 那一局已经结束，按"继续"也没有可继续的东西。
+     *
+     * 暂停键的**文案与高亮无论显隐都照常更新**（顺序：先算显示什么，再决定
+     * 显不显示）。若在隐藏时直接 return，按钮会留着上一局的旧文案，下一局
+     * 显示出来就是错的。
+     */
     function updatePauseButton() {
         if (!pauseBtn) return;
+        // 暂停键的文案与高亮：先算
         if (paused) {
             pauseBtn.innerText = '▶️ 继续';
             pauseBtn.classList.add('is-paused');
@@ -1650,27 +1767,110 @@
             pauseBtn.innerText = '⏸️ 暂停';
             pauseBtn.classList.remove('is-paused');
         }
+        // 再决定显隐
+        const inRound = !!roundInProgress;              // 有一局正在跑
+        const win = !!winScreenVisible;                 // 正停在胜利界面
+        const over = !!gameOver && !win;                // 本局已结束（胜利界面另有按钮，不算在内）
+        // 胜利界面期间暂停键也收起（横幅里已有「继续玩」，功能重复）
+        pauseBtn.classList.toggle('is-hidden', !(inRound && !win));
+        if (endBtn) endBtn.classList.toggle('is-hidden', !(inRound && !win));
+        // AI 按钮：只在"没在跑、也不在胜利界面"时给（见上面注释里的取舍）
+        if (aiBtn) aiBtn.classList.toggle('is-hidden', !(!inRound && !win));
+        // 重新开始：本局结束后给；胜利界面期间也留着（工具栏里它是唯一的操作）
+        if (restartBtn) restartBtn.classList.toggle('is-hidden', !(over || win));
+    }
+
+    // ================================================================
+    //  恢复前的 3 秒倒计时
+    // ----------------------------------------------------------------
+    //  从「暂停」或「胜利界面」切回游戏时用。设计取舍：
+    //   · 倒计时期间 paused 保持 true —— 这样 scheduleTick 里那道
+    //     `if (gameOver || paused) return` 就是双保险，即使有残留的定时器
+    //     也不会推进；逻辑只有一份，不用再造一个状态。
+    //   · 不排 tick，画面由动画循环照常刷新，所以数字能动。
+    //   · 空格与方向键在倒计时期间一律不响应（见键盘处理里的判断）。
+    //   · 只在"从静止切回运行"时启动；开局提示（beginRound）不启动，
+    //     因为那一屏本来就要求玩家按键才开始，再加倒计时是多余的。
+    // ================================================================
+    function startCountdown() {
+        countdownEndsAt = Date.now() + COUNTDOWN_MS;
+        countdownShownDigit = 0;
+        // 顺手清掉"界面把我停住了"这个标记。它是给 continuePlaying 判断用的，
+        // 到这里已经用完了；若留着，倒计时结束后 paused 会跟着变回 true，
+        // 于是「已暂停」覆盖层又盖上来 —— 实测踩到过。
+        winPausedByBanner = false;
+        paused = true;                 // 倒计时期间不推进逻辑
+        stopLoop();                    // 清掉可能还在排的 tick
+        updatePauseButton();
+        statusTip.innerText = '⏱️ 准备好了吗？' + (COUNTDOWN_MS / 1000) + ' 秒后开始';
+        drawCanvas();
+    }
+
+    /** 倒计时是否正在进行。 */
+    function countdownActive() {
+        return countdownEndsAt > 0;
+    }
+
+    /** 由动画循环每帧调用：推进倒计时，到点后真正开始跑。 */
+    function updateCountdown() {
+        if (!countdownActive()) return;
+        // 中途出现结束/达标界面时取消，避免它和那两个界面叠在一起
+        if (gameOver || winScreenVisible || roundPending) {
+            countdownEndsAt = 0;
+            return;
+        }
+        const left = countdownEndsAt - Date.now();
+        if (left <= 0) {
+            countdownEndsAt = 0;
+            countdownShownDigit = 0;
+            winPausedByBanner = false;  // 双保险：确保不会画出「已暂停」覆盖层
+            paused = false;            // 正式恢复
+            updatePauseButton();
+            clearStatus();
+            statusTip.innerText = aiMode
+                ? '🤖 AI 自动操作中（无需任何键盘输入）...'
+                : '⬆️⬇️⬅️➡️ 方向键控制';
+            startLoop();               // 从这里开始才推进逻辑
+            drawCanvas();
+        }
+    }
+
+    /** 取消倒计时（例如玩家点了「结束本局」）。 */
+    function cancelCountdown() {
+        countdownEndsAt = 0;
+        countdownShownDigit = 0;
     }
 
     function togglePause() {
         if (gameOver) return;         // 已结束就没有暂停可言
+        // 倒计时期间空格不响应：这时候按暂停没有意义，还会把倒计时搅乱
+        if (countdownActive()) return;
+        // 胜利界面显示时，空格/暂停键的含义是「继续玩」，不是「暂停/恢复」。
+        // 少了这一条会出问题：togglePause 会把 paused 翻成 false，而胜利界面
+        // 还在画（winScreenVisible 仍为 true），于是蛇在整屏遮罩底下继续走，
+        // 玩家看不见 —— 实测复现过。
+        if (winScreenVisible) {
+            continuePlaying();
+            return;
+        }
         paused = !paused;
         if (paused) {
             stopLoop();
             statusTip.innerText = '⏸️ 已暂停 —— 按空格或点「继续」恢复';
+            updatePauseButton();
+            drawCanvas();
         } else {
-            startLoop();
-            statusTip.innerText = aiMode
-                ? '🤖 AI 自动操作中（无需任何键盘输入）...'
-                : '⬆️⬇️⬅️➡️ 方向键控制';
+            // 恢复时先走 3 秒倒计时，让玩家有时间把手指放回方向键上
+            startCountdown();
         }
-        updatePauseButton();
-        drawCanvas();
     }
 
     function finishRound() {
         if (gameOver) return;
-        endGame('你手动结束了本局', 'fail');
+        cancelCountdown();           // 倒计时中结束本局：先取消，别让它到点后又 startLoop
+        // outcome 仍然是 'fail'（收尾路径与撞死完全一致，aiResult 的语义也不变），
+        // 只多带一个标记说明"是玩家自己叫停的"，供战绩图标区分（🔄 而不是 💀）。
+        endGame('你结束了本局', 'fail', true);
     }
 
     // ================================================================
@@ -1679,16 +1879,30 @@
     document.addEventListener('keydown', (e) => {
         const key = e.key;
 
-        // 空格：暂停/继续。放在最前面，且不受"AI 接管"影响——
-        // AI 跑起来之后更需要能随时按下暂停。
+        // 空格：一个键三种含义，按状态分。
+        // 放在最前面，且不受"AI 接管"影响 —— AI 跑起来之后更需要能随时暂停。
         if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
             e.preventDefault();
-            // 开局提示期间，空格的含义是"开始"而不是"暂停"
+            if (e.repeat) return;            // 按住不放只触发一次
+            // ① 开局提示期间 -> "开始"
             if (roundPending) {
-                if (!e.repeat) beginRound();
+                beginRound();
                 return;
             }
-            if (!e.repeat) togglePause();   // 按住不放只触发一次
+            // ② 胜利界面期间 -> "继续玩"（togglePause 里已有这条分支，交给它）
+            if (winScreenVisible) {
+                togglePause();
+                return;
+            }
+            // ③ 本局已结束 -> "重新开始"。
+            //    结束时暂停键已经收起，此时空格按下去本来什么都不会发生；
+            //    给它"重新开始"的含义，死了想再来一局就不必去够鼠标。
+            if (gameOver) {
+                restartFromBanner();
+                return;
+            }
+            // ④ 其余情况 -> 暂停 / 恢复
+            togglePause();
             return;
         }
 
@@ -1697,6 +1911,9 @@
         }
         if (gameOver || aiMode) return;   // AI 接管或已结束时忽略方向键
         if (roundPending) return;         // 还没开始，转向没有意义
+        // 倒计时期间不接受转向：这时候画面还没开始跑，按了也看不到反馈，
+        // 而且会让人误以为"已经开始了"。等数字走完再允许操作。
+        if (countdownActive()) return;
         // 暂停时不接受转向：否则恢复后会看到一个"多出来"的转向
         if (paused) return;
 
@@ -1723,10 +1940,16 @@
     // ================================================================
     function startAI() {
         if (aiMode) return;
-        // 开一局干净的，然后交给 AI（initGame 已把 paused 复位并刷新按钮）
+        // 开一局干净的，然后交给 AI
         initGame();
         roundPending = false;      // AI 演示不经过开局提示，直接跑
+        roundInProgress = true;
+        // 先把 aiMode 置好，再刷新按钮 —— 顺序反了的话，下面那次刷新读到的
+        // aiMode 还是 false，「AI自动玩」按钮就会继续显示着（而 AI 明明已经在跑）。
+        // 同理，initGame() 内部是先 hideWinBanner()（会刷新按钮）再把 roundPending
+        // 置回 true 的，所以这行之后也必须再刷新一次，否则暂停键会停在"隐藏"状态。
         aiMode = true;
+        updatePauseButton();
         aiResult = null;
         foodEatenCount = 0;
         statusTip.innerText = '🤖 AI 自动操作中（无需任何键盘输入）...';
@@ -1748,13 +1971,11 @@
         finishRound();
     });
 
-    // 胜利界面上的两个选择
+    // 胜利提示上的选择：继续玩。
+    // 「重新开始」就是紧挨着它左边那个工具栏按钮，restartFromBanner()
+    // 也照旧由它（以及死亡界面上的空格键）调用。
     document.getElementById('continueBtn').addEventListener('click', () => {
         continuePlaying();
-    });
-
-    document.getElementById('restartFromWinBtn').addEventListener('click', () => {
-        restartFromBanner();
     });
 
     // ================================================================
@@ -1779,9 +2000,21 @@
     });
 
     // ================================================================
-    //  重启按钮
+    //  工具栏的「重新开始」
+    // ----------------------------------------------------------------
+    //  玩到一半点它会**先把这一局记进战绩**（分数、局数都算），再去开局提示；
+    //  停在开局提示上点它则什么都不记 —— 那一局根本没开始过。
+    //  这也是为什么需要 roundInProgress 这个状态：光看 gameOver/roundPending
+    //  分不出"有一局正在跑"和"还没开始"。
     // ================================================================
     document.getElementById('restartBtn').addEventListener('click', () => {
+        if (roundInProgress) {
+            const wasAI = aiMode;
+            // outcome 记 'fail'（这一局没走完），另外标一句"玩家自己叫停"。
+            // 注意顺序：recordRound 读的是当前的 score，所以必须在
+            // startNewRoundWithPrompt()（内部会 initGame 把 score 清零）之前调用。
+            recordRound('fail', '玩到一半重新开始', wasAI, true);
+        }
         startNewRoundWithPrompt();
     });
 

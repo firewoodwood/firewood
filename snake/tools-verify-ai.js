@@ -1,13 +1,22 @@
 /**
  * AI 逻辑无头验证脚本（本地验证用，不参与提交）
  *
+ * 口径：这一版验证的是【更强的条件】—— AI 能不能一路把整盘 400 格全部填满
+ * 而一次都不撞死（要吃约 397 个食物、平均约 2 万步）。它比任务书要求的
+ * "连吃 15 个食物不死"严得多。
+ * 只验证任务书那一条的脚本是 tools-verify-15points.js（吃到 15 分即停）。
+ *
  * 做法：把 index.html 里的 <script> 抽出来，在 node:vm 里用最小 DOM/Canvas 桩
- * 跑起来，再用可复现的伪随机数驱动几百局「AI 自动玩」，统计：
- *   - 有多少局能在 stepLimit 步内连吃 15 个食物且不死
+ * 跑起来，再用可复现的伪随机数驱动多局「AI 自动玩」，统计：
+ *   - 有多少局能铺满全盘（蛇长达到总格数）
  *   - 失败原因分布、平均/最坏步数
+ *   - 「食物有解」约束的抽查结果
  *
  * 用法： node tools-verify-ai.js [局数] [每局步数上限]
- *   例： node tools-verify-ai.js 400 8000
+ *   例： node tools-verify-ai.js 12 200000
+ *
+ * 注意步数上限：铺满全盘平均约 2 万步，上限给小了（比如 8000）永远到不了终点，
+ * 统计出来的"未铺满"全是超时，不是失败。
  *
  * 页面里所有文件级声明都是 let/const，不会挂到 globalThis，
  * 因此脚本末尾追加了一小段导出代码，把观测点显式挂上去。
@@ -32,6 +41,10 @@ const code = scripts[0];
 const exportCode = `
 globalThis.__game = {
     startAI: () => startAI(),
+    // 每局开一局干净的。不能靠重复调 startAI()：它开头有一句
+    // "if (aiMode) return"，上一局若不是以 gameOver 结束（例如触到步数上限），
+    // aiMode 仍为 true，下一次调用直接返回，"新一局"其实是接着上一局跑。
+    newRound: () => { initGame(); aiMode = true; aiResult = null; },
     moveSnake: () => moveSnake(),
     gridCells: () => GRID_SIZE * GRID_SIZE,
     // 测试专用：把绘制与效果推进换成空实现。绘制只是副作用，
@@ -184,7 +197,7 @@ let solvableChecks = 0;
 
 for (let seed = 1; seed <= TRIALS; seed++) {
     sandbox.Math.random = mulberry32(seed * 2654435761);
-    game.startAI();
+    game.newRound();
 
     // 每局重置"本局帧数"；现在每帧固定 1 步，帧数就等于步数
     ticksThisTrial = 0;

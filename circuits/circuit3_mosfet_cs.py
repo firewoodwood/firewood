@@ -29,15 +29,19 @@
 
 源极直接接地（题目未给 Rs），所以 V_GS = V_G = VDD·Rg2/(Rg1+Rg2)。
 
-手算（详见正文推导）：
-    V_G  = 5 × 40/(60+40) = 2 V ... 但下面会看到，这个分压比不是 2 V 而是 2 V
+手算（详见正文推导）：题目给了 λ = 0.02 /V，所以要用含沟道长度调制的精确式
+    V_G  = 5 × 40/(60+40) = 2 V
     V_GS = V_G                      （源极接地）
-    I_D  = ½·K·(V_GS − V_th)²       （先假定饱和区）
+    V_OV = V_GS − V_th = 1 V
+    I_D  = ½·K·V_OV²·(1 + λ·V_DS)   （饱和区，与 V_DS = VDD − I_D·Rd 联立解）
     V_DS = VDD − I_D·Rd
     饱和判据：V_DS > V_GS − V_th
-    gm   = K·(V_GS − V_th)
+    gm   = K·V_OV·(1 + λ·V_DS)
     ro   = 1/(λ·I_D)
     Av   = −gm·(Rd ∥ ro)
+
+    （教材常见的 I_D = ½·K·V_OV²、gm = K·V_OV 是忽略 λ 的一阶近似，
+      脚本里也一并算出来做对照。）
 
 本脚本做：
     1) 直流工作点仿真，与手算的 V_GS / I_D / V_DS 对比，并判断是否饱和
@@ -70,7 +74,7 @@ VDD = 5.0            # V
 RG1 = 60_000.0       # Ω
 RG2 = 40_000.0       # Ω
 RD = 2_000.0         # Ω
-K = 0.8e-3           # A/V²   (0.8 mA/V²)，即 I_D = K·(V_GS − V_th)² 中的系数
+K = 0.8e-3           # A/V²   (0.8 mA/V²)，即 I_D = ½·K·(V_GS − V_th)² 中的系数
 VTH = 1.0            # V
 LAMBDA = 0.02        # 1/V
 
@@ -92,34 +96,69 @@ OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'output')
 # 手算
 # ----------------------------------------------------------------------------
 def hand_calc():
-    """按题目要求手算静态工作点与增益。"""
+    """按题目要求手算静态工作点与增益。
+
+    题目给了 λ = 0.02 /V，所以**必须把它算进去**：level-1 模型在饱和区的电流是
+        I_D = ½·K·V_ov²·(1 + λ·V_DS)
+
+    把 V_DS = VDD − I_D·Rd 代进去，含 I_D 的项可以合并，得到的是一个**一次方程**
+    （不是二次 —— 一开始我按二次去解，取错了根，算出的 I_D 差了 17%）：
+
+        I_D·(1 + ½K·V_ov²·λ·Rd) = ½K·V_ov²·(1 + λ·VDD)
+
+        =>  I_D = ½K·V_ov²·(1 + λ·VDD) / (1 + ½K·V_ov²·λ·Rd)
+
+    代入本题参数：0.4mA×1.1 / (1 + 0.4mA×0.02×2k) = 0.433071 mA，
+    V_DS = 5 − 0.433071mA×2k = 4.133858 V，与仿真完全一致。
+
+    说明：常见的教材写法 I_D = ½K·V_ov² 是**忽略 λ 的一阶近似**，本题因为给了
+    具体的 λ，用精确式才能和仿真对上。下面把两种都算出来，方便对照。
+    """
     vg = VDD * RG2 / (RG1 + RG2)          # 分压
     vgs = vg                              # 源极接地
     vov = vgs - VTH                       # 过驱动电压
-    id_ = 0.5 * K * vov ** 2              # 饱和区平方律 I_D = ½·K·V_ov²
-    vds = VDD - id_ * RD
-    sat_ok = vds > vov                    # 饱和判据 V_DS > V_GS − V_th
-    gm = K * vov                          # gm = ∂I_D/∂V_GS = K·V_ov
-    ro = 1.0 / (LAMBDA * id_)
-    rd_par_ro = 1.0 / (1.0 / RD + 1.0 / ro)
-    av = -gm * rd_par_ro                  # 中频电压增益（输出开路）
-    av_no_ro = -gm * RD                   # 忽略 ro 时的近似
-    return dict(vg=vg, vgs=vgs, vov=vov, id=id_, vds=vds, sat_ok=sat_ok,
-                gm=gm, ro=ro, rd_par_ro=rd_par_ro, av=av, av_no_ro=av_no_ro)
+
+    # --- 精确解：含 (1 + λ·V_DS) ---
+    #   I_D = ½K·V_ov²·(1 + λ·VDD) / (1 + ½K·V_ov²·λ·Rd)
+    base = 0.5 * K * vov ** 2
+    id_exact = base * (1 + LAMBDA * VDD) / (1 + base * LAMBDA * RD)
+    vds_exact = VDD - id_exact * RD
+    # 注意：定出 V_DS 之后，gm 也要跟着带上 (1 + λ·V_DS)
+    #   gm = ∂I_D/∂V_GS = K·V_ov·(1 + λ·V_DS)
+    gm_exact = K * vov * (1 + LAMBDA * vds_exact)
+    ro_exact = 1.0 / (LAMBDA * id_exact)
+    rd_par_ro_exact = 1.0 / (1.0 / RD + 1.0 / ro_exact)
+    av_exact = -gm_exact * rd_par_ro_exact
+
+    # --- 一阶近似：忽略 λ（教材常见写法），用来对照 ---
+    id_approx = 0.5 * K * vov ** 2
+    vds_approx = VDD - id_approx * RD
+    gm_approx = K * vov
+    ro_approx = 1.0 / (LAMBDA * id_approx)
+    rd_par_ro_approx = 1.0 / (1.0 / RD + 1.0 / ro_approx)
+    av_approx = -gm_approx * rd_par_ro_approx
+
+    sat_ok = vds_exact > vov              # 饱和判据 V_DS > V_GS − V_th
+    av_no_ro = -gm_exact * RD             # 再忽略 ro 的近似
+
+    return dict(vg=vg, vgs=vgs, vov=vov, sat_ok=sat_ok,
+                # 精确解（与仿真对比用这一组）
+                id=id_exact, vds=vds_exact, gm=gm_exact, ro=ro_exact,
+                rd_par_ro=rd_par_ro_exact, av=av_exact, av_no_ro=av_no_ro,
+                # 一阶近似（忽略 λ）
+                id_approx=id_approx, vds_approx=vds_approx, gm_approx=gm_approx,
+                ro_approx=ro_approx, rd_par_ro_approx=rd_par_ro_approx,
+                av_approx=av_approx)
 
 
 # ----------------------------------------------------------------------------
 # 电路搭建
 # ----------------------------------------------------------------------------
-def build_common(with_ro_stub=False):
+def build_common():
     """搭出电路里与激励无关的部分（供电、偏置、RD、MOS、寄生电容）。
 
     激励源不放在这里：瞬态要 SIN、AC 要 AC 1，两者不同；
     而且同名源重复添加会抛 NameError: Element name Vin is already defined。
-
-    with_ro_stub:
-        True 时额外在漏极与地之间并一个电阻 ro = 1/(λ·I_D)。
-        原因见下面关于 ngspice 局限的注释。
     """
     c = Circuit('NMOS Common-Source Amplifier')
 
@@ -127,7 +166,7 @@ def build_common(with_ro_stub=False):
     c.V('dd', 4, c.gnd, VDD @ u_V)
 
     # 输入耦合电容 Cb1：题目说"视为足够大"，取 100 µF
-    #   （1 kHz 时容抗 ≈1.6 mΩ，远小于 Rg1∥Rg2 = 24 kΩ，可视为交流短路）
+    #   （1 kHz 时容抗 = 1/(2π×1k×100µ) ≈ 1.59 Ω，远小于 Rg1∥Rg2 = 24 kΩ，可视为交流短路）
     #   注意：这里直接写 SI 数值 100e-6，不要依赖 @u_F 的自动缩放 ——
     #   实测 `100 @ u_F` 生成的网表是 `Cb1 1 2 100`，也就是 100 法拉，
     #   耦合电容变成短路，栅极被输入源强行钳住，增益会退化成 gm 本身。
@@ -149,11 +188,16 @@ def build_common(with_ro_stub=False):
     #        所以这里 KP 与题目的 K 数值相同（不是 2K）。
     #        这一处我一开始按 ½K·V_ov² 手算、又给 KP 乘了 2，结果 I_D 差了一倍，
     #        靠"手算 vs 仿真"对比表当场抓出来。
-    #   λ 的参数名是 lambd（lambda 是 Python 关键字，不能当关键字参数）
+    #   λ 的参数名必须写完整单词 lambda。**写 lambd 不会报错，但会被静默忽略**，
+    #   仿真里的管子实际 λ=0 —— 这一点实测确认过：固定 Vgs=2V/Vds=4.2V，
+    #   写 lambd=0.02 与完全不写 λ 得到的 I_D 都是 0.400000 mA；写 lambda=0.02
+    #   才得到 0.433600 mA = 0.4×(1+0.02×4.2)。
+    #   lambda 是 Python 关键字，不能直接当关键字参数，但可以用 dict 展开绕过：
+    #   c.model(..., **{'lambda': LAMBDA})
     #   注意：cgs / cgd **不是**合法的 ngspice 模型参数，会报
     #   "no such parameter on this device"（实测逐个参数试出来的）。
     #   所以这两只电容改成在电路里接成实体元件，见下。
-    c.model('NMOS_enh', 'NMOS', level=1, vto=VTH, kp=K, lambd=LAMBDA)
+    c.model('NMOS_enh', 'NMOS', level=1, vto=VTH, kp=K, **{'lambda': LAMBDA})
     # 漏极、栅极、源极、衬底（衬底与源极一起接地）
     # 不传 l/w：KP 已经把 W/L 折算进去了，再传实例参数会被 ngspice 拒绝。
     c.MOSFET('1', 3, 2, c.gnd, c.gnd, model='NMOS_enh')
@@ -163,18 +207,11 @@ def build_common(with_ro_stub=False):
     c.C('gs', 2, c.gnd, CGS @ u_F)
     c.C('gd', 2, 3, CGD @ u_F)
 
-    # 用一只显式电阻代表沟道长度调制带来的输出电阻 ro = 1/(λ·I_D)。
-    #
-    # 为什么要这么绕：实测发现 ngspice 的 level-1 MOSFET 在 **AC 小信号分析**
-    # 里并不把 λ 计入输出电导（gds 被算成 0）。证据是把 λ 从 0 扫到 0.5，
-    # AC 增益始终是 −gm·Rd 一点不变，即 ro 被当成无穷大。
-    # （直流工作点里 λ 是生效的，只是不影响这里的偏置。）
-    # 为了能真正验证 "Av = −gm·(Rd∥ro)" 这个手算公式，就在外面并一只
-    # 数值等于 1/(λ·I_D) 的电阻来代表 ro —— 等效电路上它就是和 Rd 并联的。
-    if with_ro_stub:
-        hc = hand_calc()
-        c.R('ro_sim', 3, c.gnd, hc['ro'] @ u_Ohm)
-
+    # 这里原先并过一只"代表 ro"的电阻（值取手算的 1/(λ·I_D)），
+    # 依据是当时以为"ngspice 的 level-1 在 AC 里把 gds 当成 0"。
+    # 那个判断是错的：真正的原因是模型参数名写成了 lambd、被静默忽略，
+    # 于是 λ=0、gds=0。参数名改对之后模型自带 ro，这只电阻等于**重复计入**，
+    # 实测会把手算本该吻合的增益从 1.7050 拉到 1.6743，所以删掉。
     return c
 
 
@@ -200,9 +237,9 @@ def solve_operating_point():
     return dict(vg=val('2'), vd=vd, id=id_sim, raw=an)
 
 
-def run_transient(with_ro_stub=True):
+def run_transient():
     """瞬态：输入 10 mV / 1 kHz 正弦，看输出反相放大并实测增益。"""
-    c = build_common(with_ro_stub=with_ro_stub)
+    c = build_common()
     period = 1.0 / VI_FREQ
     # DC 偏置 0 + 正弦激励；覆盖 6 个周期，前面留 4 个周期让耦合电容进入稳态
     c.V('in', 1, c.gnd, 'DC 0 SIN(0 %g %g 0 0 0)' % (VI_AMP, VI_FREQ))
@@ -232,19 +269,27 @@ def run_transient(with_ro_stub=True):
                 period=period)
 
 
-def run_ac(with_ro_stub=False):
+def run_ac():
     """交流扫描：幅频/相频，验证中频增益。"""
-    c = build_common(with_ro_stub=with_ro_stub)
+    c = build_common()
     c.V('in', 1, c.gnd, 'DC 0 AC 1')
     sim = c.simulator(temperature=25, nominal_temperature=25)
-    analysis = sim.ac(start_frequency=1 @ u_Hz, stop_frequency=100 @ u_Hz * 1000,
-                      number_of_points=50, variation='dec')
+    # 频段取 10 Hz ~ 100 MHz：低频端能看到输入耦合电容带来的高通效应
+    # （Cb1=100µF 配 Rg1∥Rg2=24kΩ，拐点约 0.066 Hz，所以 10 Hz 已经接近平坦），
+    # 高频端能看到 Cgd 的米勒效应造成的滚降。
+    # 原先只扫到 100 kHz，结果整条曲线在图上几乎是平的、看不出任何趋势。
+    analysis = sim.ac(start_frequency=10 @ u_Hz, stop_frequency=100 @ u_Hz * 1e6,
+                      number_of_points=20, variation='dec')
 
     freq = np.array(analysis.frequency)
     vout = np.array(analysis['3'])
     gain = np.abs(vout)
     gain_db = 20.0 * np.log10(np.maximum(gain, 1e-12))
-    phase_deg = np.angle(vout, deg=True)
+    # 相位要"展开"：反相放大器的相位落在 −180° 附近，而 np.angle 的值域是
+    # (−180°, 180°]，相位穿过 −180° 时会从 −179.9° 跳到 +179.9°，画出来就是
+    # 一条竖线 —— 看着像相位突变，其实只是绕圈。展开后才是连续的物理曲线：
+    # 低频 −176° → 中频 −180° → 高频继续朝 −180° 以下走。
+    phase_deg = np.degrees(np.unwrap(np.angle(vout)))
 
     # 中频增益：取 1 kHz 附近
     mid = float(np.interp(np.log10(1000.0), np.log10(freq), gain))
@@ -304,14 +349,14 @@ def main():
 
     # ---------- 3) 交流扫描 ----------
     ac = run_ac()
-    ac_ro = run_ac(with_ro_stub=True)
     print('\n[3] 交流扫描（中频增益）')
     print('    手算  Av = −gm·(Rd∥ro) = %.4f  (%.2f dB)'
           % (hc['av'], 20 * np.log10(abs(hc['av']))))
-    print('    仿真  Av（并上代表 ro 的电阻）= %.4f  (%.2f dB)   ← 与手算对照'
-          % (ac_ro['gain_mid'], 20 * np.log10(abs(ac_ro['gain_mid']))))
-    print('    仿真  Av（仅管子 + Rd）      = %.4f  (%.2f dB)   ← 见下面的说明'
+    print('    仿真  Av（管子 + Rd）  = %.4f  (%.2f dB)'
           % (ac['gain_mid'], 20 * np.log10(abs(ac['gain_mid']))))
+    dev_av = abs(abs(ac['gain_mid']) - abs(hc['av'])) / abs(hc['av']) * 100
+    print('    偏差 = %.4f%%   ← ro 由模型自己提供（λ 已生效），无需外接电阻'
+          % dev_av)
 
     print('\n[4] 小信号参数')
     print('    gm = K·(V_GS − V_th) = %.4f mA/V' % (hc['gm'] * 1e3))
@@ -320,12 +365,13 @@ def main():
     print('    忽略 ro 的近似 Av    = %.4f （与精确值差 %.2f%%）'
           % (hc['av_no_ro'], abs((hc['av_no_ro'] - hc['av']) / hc['av']) * 100))
 
-    print('\n[5] 关于 ngspice level-1 模型在 AC 分析中不计 λ 的说明')
-    print('    实测：把 λ 从 0 取到 0.5，AC 增益恒为 −gm·Rd = %.4f，完全不变；' % hc['av_no_ro'])
-    print('    说明该模型在交流小信号里把输出电导 gds 算成 0（ro → ∞），')
-    print('    直流工作点不受影响（I_D、V_DS 与 λ 无关）。')
-    print('    因此本脚本用一只显式电阻 %0.2f kΩ 代表 ro 与 Rd 并联，' % (hc['ro'] / 1e3))
-    print('    才能真正验证 Av = −gm·(Rd∥ro) 这个手算结论。')
+    print('\n[5] 关于 λ 与 ro')
+    print('    level-1 模型饱和区电流是 I_D = ½·K·V_ov²·(1 + λ·V_DS)，λ 直接进直流工作点；')
+    print('    AC 小信号里它也照常给出 gds = λ·I_D（即 ro = %.2f kΩ）。' % (hc['ro'] / 1e3))
+    print('    所以 ro 不需要外接电阻来代表 —— 早先版本这么做，是因为模型参数名')
+    print('    写成了 lambd，被 ngspice 静默忽略（不报错），实际 λ=0、gds=0。')
+    print('    这一点是拿探针实测出来的：固定 Vgs=2V/Vds=4.2V，写 lambd=0.02 与')
+    print('    完全不写 λ，I_D 都是 0.400000 mA；写 lambda=0.02 才得到 0.433600 mA。')
 
     # ---------- 画图 ----------
     # 瞬态波形（输入输出幅度差很多，所以用双 y 轴）
@@ -351,21 +397,23 @@ def main():
 
     # Bode
     fig, axes = plt.subplots(2, 1, figsize=(9, 6.4), sharex=True)
-    axes[0].semilogx(ac_ro['freq'], ac_ro['gain_db'], color='#2ecc71', linewidth=1.8)
+    axes[0].semilogx(ac['freq'], ac['gain_db'], color='#2ecc71', linewidth=1.8)
     axes[0].axhline(20 * np.log10(abs(hc['av'])), color='#e74c3c',
                     linewidth=0.9, linestyle='--')
     axes[0].set_ylabel('增益 (dB)')
     axes[0].set_title('NMOS 共源放大：幅频与相频特性')
     axes[0].annotate('中频 %.2f dB' % (20 * np.log10(abs(hc['av']))),
                      xy=(1e3, 20 * np.log10(abs(hc['av']))),
-                     xytext=(1e3 * 4, 20 * np.log10(abs(hc['av'])) - 12),
+                     xytext=(3e3, 20 * np.log10(abs(hc['av'])) - 3.0),
                      fontsize=9, color='#c0392b',
                      arrowprops=dict(arrowstyle='->', color='#c0392b', linewidth=0.9))
-    axes[1].semilogx(ac_ro['freq'], ac_ro['phase_deg'], color='#8e44ad', linewidth=1.8)
+    axes[1].semilogx(ac['freq'], ac['phase_deg'], color='#8e44ad', linewidth=1.8)
     axes[1].axhline(-180, color='#e74c3c', linewidth=0.9, linestyle='--')
     axes[1].set_xlabel('频率 (Hz)')
     axes[1].set_ylabel('相位 (°)')
-    axes[1].annotate('中频 -180°（反相）', xy=(1e3, -180), xytext=(1e3 * 3, -140),
+    # 标注放在相位子图【内部】偏右上。原来写的是 y = −140（在 −180 线之上），
+    # 而这条图的纵轴上限就是 −175 左右，文字会跑到轴外、箭头拖出一条长线。
+    axes[1].annotate('中频 −180°（反相）', xy=(1e3, -180), xytext=(3e4, -198),
                      fontsize=9, color='#c0392b',
                      arrowprops=dict(arrowstyle='->', color='#c0392b', linewidth=0.9))
     # 这里不用 tight_layout：两个子图加上标注后它常报

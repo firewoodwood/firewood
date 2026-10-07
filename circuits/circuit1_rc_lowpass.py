@@ -140,10 +140,13 @@ def run_ac():
     fc_meas = None
     for i in range(1, len(gain_db)):
         if gain_db[i - 1] >= -3.0 and gain_db[i] < -3.0:
-            # 线性插值提高精度
+            # 线性插值提高精度。
+            #   标准式是 (目标值 − y0)/(y1 − y0)；这里目标值是 −3.0 dB。
+            #   我一开始写成了 (y0 − (−3.0))，两个负号相消、插值点被镜像到
+            #   栅格点的另一侧，实测差了 0.36 个百分点（−0.60% 而不是 −0.24%）。
             x0, x1 = np.log10(freq[i - 1]), np.log10(freq[i])
             y0, y1 = gain_db[i - 1], gain_db[i]
-            x = x0 + (y0 - (-3.0)) * (x1 - x0) / (y1 - y0)
+            x = x0 + ((-3.0) - y0) * (x1 - x0) / (y1 - y0)
             fc_meas = 10 ** x
             break
 

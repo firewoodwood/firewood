@@ -214,7 +214,10 @@
         color: var(--accent);
         border: 1px solid var(--accent);
     }
-    [data-theme="dark"] .btn { color: #10211a; }
+    /* 深色下实心按钮的底色是亮绿，所以要配深字；但要排除 ghost 变体 ——
+       ghost 是透明底 + 主题色描边，字必须仍是主题色，否则黑字压在深底上几乎看不见。 */
+    [data-theme="dark"] .btn:not(.ghost) { color: #10211a; }
+    [data-theme="dark"] .btn.ghost { color: var(--accent); }
 
     footer {
         padding-top: 30px;
@@ -245,6 +248,19 @@
         .card, .link-row, .project { box-shadow: none; border-color: #ccc; }
     }
 </style>
+<script>
+    // 主题要在这里就定下来，不能等页尾的脚本 —— 否则深色用户会先看到
+    // 一瞬浅色底再变暗（"闪白"）。这里只读并套用属性，点击交互在页尾。
+    (function () {
+        var t = null;
+        try { t = localStorage.getItem('firewoodTheme'); } catch (e) { /* 忽略 */ }
+        if (!t) {
+            t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+                ? 'dark' : 'light';
+        }
+        if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+</script>
 </head>
 <body>
 
@@ -334,7 +350,7 @@
                 每个电路的电路图都是我自己手绘的，理论值先手算、再用仿真跑一遍，最后逐项对照。
             </p>
             <p>
-                RC 的时间常数与截止频率偏差在 0.6% 以内；戴维南等效电路在五种负载下的
+                RC 的时间常数与截止频率偏差在 0.25% 以内；戴维南等效电路在五种负载下的
                 端口电压与电流偏差均为 0；MOSFET 的静态工作点偏差为 0.0000%。
                 完整的手算过程、对比表与波形图见页面最下方的报告区。
             </p>
@@ -366,7 +382,12 @@
             <a class="link-row" href="snake/tools-verify-ai.js">
                 <span class="icon" aria-hidden="true">🧪</span>
                 <span class="label">AI 验证脚本</span>
-                <span class="value">node snake/tools-verify-ai.js —— 跑几百局统计 AI 是否真不死</span>
+                <span class="value">node snake/tools-verify-ai.js —— 跑多局统计 AI 能否把整盘填满而不撞死</span>
+            </a>
+            <a class="link-row" href="snake/tools-verify-15points.js">
+                <span class="icon" aria-hidden="true">🎯</span>
+                <span class="label">15 分验证脚本</span>
+                <span class="value">node snake/tools-verify-15points.js —— 对应任务书：连吃 15 个食物不死（100 局实测全过）</span>
             </a>
             <a class="link-row" href="snake/tools-verify-controls.js">
                 <span class="icon" aria-hidden="true">🧪</span>
@@ -409,10 +430,14 @@
 
 <script>
     // ============================================================
-    //  主题切换：与贪吃蛇页面同一套做法
+    //  主题切换
     //  —— 改根元素属性驱动 CSS 变量，选择写 localStorage，刷新后保留。
     //  localStorage 在 file:// 或隐私模式下可能抛异常，全部包 try/catch，
     //  最坏情况只是"主题不被记住"，不影响页面。
+    //
+    //  读主题这一步放在 <head> 里（下面那个内联脚本），这里只负责交互。
+    //  原因：脚本放页尾要等整个 body 解析完才执行，深色用户会先看到一瞬
+    //  浅色底再变暗，也就是"闪白"。
     // ============================================================
     var STORAGE_KEY = 'firewoodTheme';
 
@@ -430,14 +455,6 @@
             document.documentElement.removeAttribute('data-theme');
         }
     }
-
-    // 首屏就套用已保存的主题，避免"先白闪一下再变暗"
-    var saved = safeGet(STORAGE_KEY);
-    if (!saved) {
-        saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
-            ? 'dark' : 'light';
-    }
-    applyTheme(saved);
 
     document.getElementById('themeToggle').addEventListener('click', function () {
         var now = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';

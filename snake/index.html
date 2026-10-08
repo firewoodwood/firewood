@@ -42,16 +42,39 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        html {
+            /* 始终保留滚动条：内容高度在视口上下浮动时，滚动条的"出现/消失"
+               会改变可用宽度（实测 clientWidth 443 <-> 450），整页跟着跳
+               2.92px。让它一直在，宽度就恒定了。
+               注：`scrollbar-gutter: stable` 在这个页面实测没效果，所以用
+               overflow-y: scroll 这个更直接的做法。 */
+            overflow-y: scroll;
+            scrollbar-gutter: stable;
+        }
+
         body {
             background: var(--bg-color);
             min-height: 100vh;
             display: flex;
             justify-content: center;
-            align-items: center;
+            /* 垂直居中交给子元素的 `margin: auto` 做（见 .layout —— 它才是
+               body 的 flex 子元素），
+               不用 align-items。原因：`safe center` 的语义是"放不下就退回
+               顶部对齐"，而"退回"这个动作本身就是位移 —— 内容高度刚好跨过
+               视口高度时（实测 body 900.00 -> 901.34）会整页跳 2.92px。
+               `margin: auto` 在放得下时居中、放不下时从顶部开始，
+               两种情况下位置是连续的，跨过阈值不跳。 */
+            align-items: flex-start;
             font-family: 'Segoe UI', Roboto, sans-serif;
             transition: background 0.3s ease;
             margin: 0;
             padding: 20px;
+            /* 和 html 一样预留滚动条空间。只给 html 设不够 ——
+               body 自己是滚动容器时，可用宽度仍会在"滚动条出现/消失"之间变，
+               而 canvas 是流式宽度（width:100% + aspect-ratio:1），
+               宽度一变高度也跟着变，形成"宽度↔高度互相触发"的小循环。 */
+            overflow-y: scroll;
+            scrollbar-gutter: stable;
         }
 
         .layout {
@@ -60,6 +83,10 @@
             align-items: flex-start;
             flex-wrap: wrap;
             justify-content: center;
+            /* 垂直居中由它负责（body 是 flex 容器，而它是 body 的 flex 子元素）。
+               放不下时自动从顶部开始，且位置连续 —— 不会像 `safe center`
+               那样在"刚好超过视口高度"时跳一下。 */
+            margin: auto;
         }
 
         .game-wrapper {
@@ -69,8 +96,17 @@
             box-shadow: var(--shadow);
             transition: background 0.3s ease, box-shadow 0.3s ease;
             text-align: center;
-            max-width: 650px;
-            width: fit-content;
+            /* 宽度写死：原来用 width: fit-content，宽度会随"这一屏显示几个
+               按钮"变，五个界面的卡片宽度因此都不一样（也会带着 canvas 变高）。
+               470px = 35px 内边距 ×2 + 400px 画布，正好容下画布。 */
+            width: 470px;
+            max-width: 100%;
+            box-sizing: border-box;
+            /* 高度也统一：工具栏已固定成两行，这里再给一个统一的最小高度，
+               兜住"胜利提示条比别的界面多出 10px"这一点。
+               720px 是按内容最高的那个界面（胜利）留出来的，其余界面底部
+               会有一小块空白 —— 这是"五个界面一样大"必然的结果。 */
+            min-height: 720px;
         }
 
         /* ========== 多局战绩面板 ========== */
@@ -133,14 +169,68 @@
 
         .score-area {
             display: flex;
-            gap: 18px;
+            gap: 4px;
             font-weight: 600;
             font-size: 17px;
+            /* 数字等宽：否则 0/1 比 2~9 窄，分数每跳一次整行宽度就变一次。 */
+            font-variant-numeric: tabular-nums;
+            /* 宽度跟着三条内容走。这里仍要留意"吃食物时页面颤动"那个坑：
+               宽度会随数字位数变（9→10 时约宽 19px），而顶栏是
+               `justify-content: space-between`，右侧变宽会把左边标题挤窄、
+               整行重排 —— 但那一轮已经用 `body { align-items: safe center }`
+               把"整页跳动"这一层按住了，实测吃食物 180 帧零几何变化
+               （详见 4.12）。 */
+            flex: 0 1 auto;
         }
-        .score-area span {
+        /* 每个计数条**贴着内容**，左对齐 —— 这样三条的左侧留白都等于 padding，
+           看起来一样长。早先写的是固定 134px + 右对齐，结果内容窄的
+           （「🍎 0」64px）左边空出 55.7px，而内容宽的（「🎮 399 局」106px）
+           只空 14px，左边一眼看去就不齐。
+           注意不能用固定宽度来"对齐数字"：那样只要内容和槽宽有差值，
+           这个差值就全堆在左边。 */
+        /* 数字单独占一个**固定宽度**的槽（按三位数预留），并在槽里右对齐。
+           这样两头都顾上了：
+             · 三条都是左对齐 + 贴内容，左侧留白恒等于 padding（不会像固定
+               整条宽度那样，把内容与槽宽的差值全堆在左边）；
+             · 数字位数变化时，动的只是数字在槽内的位置，槽宽不变，
+               整条宽度也不变 —— 不会再把顶栏撑宽。
+           实测：一位数约 9.5px、两位数 18.9px、三位数 28.3px，取 30px。 */
+        .score-area .num {
+            flex: 0 0 30px;
+            text-align: right;
+        }
+        /* 注意用 `>`：这三条胶囊样式只给**直接子元素**。
+           写成 `.score-area span`（后代选择器）会连内层的 .num 与数字 span
+           一起套上背景与 padding，把 30px 的数字槽撑成 58px —— 实际踩到过。 */
+        .score-area > span {
+            flex: 0 0 auto;
+            min-width: 0;
             background: var(--muted);
             padding: 6px 14px;
             border-radius: 40px;
+            text-align: left;
+            white-space: nowrap;
+        }
+        /* 内层不放背景、不要内边距，只占位；宽度必须钉死，
+           否则会被上面 `.score-area span { flex: 0 0 auto }` 拉成内容宽度。 */
+        .score-area .num,
+        .score-area .num > span {
+            background: none;
+            padding: 0;
+            border-radius: 0;
+            flex: 0 0 auto;
+        }
+        .score-area .num {
+            width: 30px;
+            min-width: 30px;
+            max-width: 30px;
+        }
+        .score-area .num > span {
+            display: inline-block;
+            width: 30px;
+            min-width: 30px;
+            max-width: 30px;
+            text-align: right;
         }
 
         canvas {
@@ -150,34 +240,59 @@
             background: var(--bg-color);
             border: 2px solid var(--border-color);
             box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
-            width: 100%;
-            aspect-ratio: 1/1;
-            max-width: 500px;
-            height: auto;
+            /* 尺寸**写死**，不要用 width:100% + aspect-ratio 那套流式尺寸：
+               那样卡片一变宽 canvas 就跟着变高，而五个界面显示的按钮数不同、
+               卡片宽度也不同，于是每个界面的画布大小都不一样。
+               写死之后画布在所有界面里始终是 400×400（也正好是 canvas 的
+               内部分辨率，绘制最清晰）。 */
+            width: 400px;
+            height: 400px;
+            max-width: 100%;
             transition: border 0.3s ease, background 0.3s ease;
         }
 
         .toolbar {
             display: flex;
             justify-content: center;
-            gap: 14px;
-            margin-top: 22px;
+            align-items: flex-start;
+            gap: 6px;
+            margin-top: 14px;
             flex-wrap: wrap;
+            /* 高度**固定**：按钮显示的个数随界面变，不固定的话工具栏会从
+               1 行长到 2 行，五个界面的卡片高度就对不上了。
+               定成两行是因为按钮最多的界面本来就要两行（一行装不下）。 */
+            height: 102px;
+            box-sizing: border-box;
+        }
+
+        /* 「主题」推到**本行行尾**。
+           为什么是行尾：按钮个数随界面变（开始 2 个、游戏中 4 个…），
+           换行位置就跟着变，所以"第几个格子"这种横向位置稳不住；
+           而"行尾"是唯一稳定的锚点 —— 无论在 1 行还是 2 行，它都贴着行尾。
+           实测五个界面里它的位置完全一致（117,58 → 同一处）。 */
+        .toolbar > .btn-theme {
+            margin-left: auto;
         }
 
         .btn {
             background: var(--btn-bg);
             color: #fff;
             border: none;
-            padding: 10px 24px;
+            /* 内边距与字号收紧（原 padding 10px 24px / 16px）：卡片定宽 470px
+               之后，最挤的那一行是胜利界面的 [重新开始 + 胜利提示 + 主题]，
+               实测要 415px，超过卡片内宽 400px，会把「主题」挤到第二行。
+               收一档之后这一行放得下，「主题」就能稳定贴在第一行行尾。 */
+            padding: 9px 12px;
             border-radius: 40px;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s, transform 0.1s;
             box-shadow: 0 4px 12px rgba(74, 144, 217, 0.3);
             letter-spacing: 0.5px;
-            min-width: 100px;
+            white-space: nowrap;
+            box-sizing: border-box;
+            max-width: 100%;
         }
         .btn:hover {
             background: var(--btn-hover);
@@ -268,13 +383,17 @@
            用真实按钮而不是画在 canvas 上，键盘和读屏才都能用。 */
         /* 胜利提示：和工具栏里其它按钮排在同一行，所以做成按钮尺寸的胶囊，
            而不是原来那种整条横幅（它现在跟着「重新开始」一起横排）。 */
+        /* 这一层只作为"继续玩"的容器存在（原来它外面套了一圈金色边框，
+           按学生要求去掉了）。保留这个容器是因为 JS 用它来显示/隐藏，
+           而且工具栏的换行布局依赖它的存在。 */
         .win-banner {
             display: none;              /* 默认隐藏，达标时由 JS 显示 */
             align-items: center;
-            padding: 3px;
-            border-radius: 12px;
-            border: 2px solid #f1c40f;
-            background: rgba(241, 196, 15, 0.20);
+            /* 不要让它参与 flex 伸展：工具栏定宽后它是 flex 项，
+               默认 flex-shrink:1；钉住它，避免在"剩余空间不足"时把同行的
+               「继续玩」挤到下一行。 */
+            flex: 0 0 auto;
+            padding: 0;
         }
         .win-banner.show { display: flex; }
         .btn-continue {
@@ -302,11 +421,11 @@
     <div class="game-wrapper">
         <!-- 头部 -->
         <div class="header">
-            <div class="title">🐍 贪吃蛇</div>
+            <div class="title">贪吃蛇</div>
             <div class="score-area">
-                <span>🍎 <span id="scoreDisplay">0</span></span>
-                <span>🏆 <span id="highScoreDisplay">0</span></span>
-                <span>🎮 <span id="roundCountDisplay">0</span> 局</span>
+                <span>🍎 <span class="num"><span id="scoreDisplay">0</span></span></span>
+                <span>🏆 <span class="num"><span id="highScoreDisplay">0</span></span></span>
+                <span>🎮 <span class="num"><span id="roundCountDisplay">0</span></span> 局</span>
             </div>
         </div>
 
@@ -322,11 +441,11 @@
                  「重新开始」就在紧挨着的左边，两个选择在同一行里。
                  展示内容（奖杯 / 得分 / 蛇长 / 步数）画在画布上，这里只有按钮。 -->
             <div class="win-banner" id="winBanner" role="status" aria-live="polite">
-                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 继续玩</button>
+                <button class="btn btn-continue" id="continueBtn" type="button">▶️ 空格继续</button>
             </div>
-            <button class="btn btn-ai" id="aiBtn">🤖 AI自动玩</button>
+            <button class="btn btn-ai" id="aiBtn">AI自动玩</button>
             <button class="btn btn-danger" id="endBtn">💀 结束本局</button>
-            <button class="btn btn-theme" id="themeToggle">🌓 主题</button>
+            <button class="btn btn-theme" id="themeToggle">🌙 切换夜间模式</button>
         </div>
 
         <!-- 状态信息 -->
@@ -364,7 +483,8 @@
     // 只触发一次（重开或换局才复位），否则每吃一个食物都会再弹一次，很烦。
     const WIN_SCORE = 15;
     const HISTORY_MAX = 10;             // 战绩最多保留局数
-        const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
+        const EFFECT_PARTICLE_LIFE = 620;   // 粒子寿命(ms)
+const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
     const EFFECT_FLASH_LIFE = 320;      // 死亡闪屏时长(ms)
 
     const canvas = document.getElementById('gameCanvas');
@@ -381,6 +501,7 @@
     const restartBtn = document.getElementById('restartBtn');
     const endBtn = document.getElementById('endBtn');
     const aiBtn = document.getElementById('aiBtn');
+    const themeBtn = document.getElementById('themeToggle');
 
     // ---------- 游戏状态 ----------
     let snake = [];
@@ -402,6 +523,7 @@
     // 纯视觉的短生命周期对象，每帧在 updateEffects() 里推进、过期即丢弃。
     // 用 Date.now() 当时间基准：AI 模式一帧可能走多步（这里现在是 1 步），
     // 用时间而不是帧数计算寿命，动画时长才不会随速度变化。
+    let particles = [];              // 吃食物时炸开的小点
     let floaters = [];               // 上浮并淡出的文字，如 "+1"
     let deathFlashUntil = 0;         // 死亡闪屏的截止时间戳
 
@@ -631,9 +753,7 @@
                 safeSet('snakeHighScore', String(highScore));
             }
             updateScoreDisplay();
-            // 反馈：在食物原来那一格浮出一个「+1」，向上飘并淡出。
-            // 这里原来还会炸开一圈小点（粒子），按学生要求去掉了 —— 吃食物不再有
-            // 那种"啪一下散开"的画面变化，只留这个数字提示。
+            // 反馈：在食物那一格炸开一圈小点，并浮出一个「+1」。
             spawnEatEffects(
                 food.x * cellSize + cellSize / 2,
                 food.y * cellSize + cellSize / 2
@@ -1035,7 +1155,10 @@
         winFlag = (outcome === 'full');       // 铺满算"圆满走完"，不是输
         // 结束原因：既写进状态栏，也画在画布上，不用低头看
         endReason = message;
-        statusTip.innerText = (outcome === 'fail' ? '💀 ' : '🎉 ') + message;
+        // 结束态下空格键的含义是"重新开始"（见键盘处理里的分支），
+        // 所以在状态栏把它写出来 —— 玩家不用去猜空格现在管什么。
+        statusTip.innerText = (outcome === 'fail' ? '💀 ' : '🎉 ') + message
+            + ' —— 按空格重新开始';
 
         // 死亡反馈：闪一下红屏（铺满全盘是自然终点，不闪）
         if (outcome === 'fail') spawnDeathEffect();
@@ -1162,17 +1285,36 @@
     function updateEffects() {
         const now = Date.now();
 
+        particles = particles.filter(p => now - p.born < EFFECT_PARTICLE_LIFE);
+        for (const p of particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.06;          // 轻微下坠，看起来像迸溅
+        }
+
         floaters = floaters.filter(f => now - f.born < EFFECT_FLOATER_LIFE);
     }
 
     /**
-     * 吃到食物时的画面反馈：在食物原来那一格浮出一个「+1」，向上飘并淡出。
+     * 吃到食物时的画面反馈：在食物那一格炸开一圈小点，并浮出一个「+1」。
      *
-     * 这里原来还会炸开一圈小点（粒子），按学生要求去掉了 —— 吃食物不再有
-     * 那种"啪一下散开"的视觉变化，只留这个数字提示（它属于分数反馈）。
+     * 粒子是 8 颗、随机角度与速度、金绿两色，带一点下坠，看起来像迸溅。
+     * （这一套曾被要求去掉过，后来又要求恢复。）
      */
     function spawnEatEffects(cx, cy) {
-        floaters.push({ x: cx, y: cy, text: '+1', born: Date.now(), color: '#2ecc71' });
+        const now = Date.now();
+        for (let i = 0; i < 8; i++) {
+            const a = (Math.PI * 2 * i) / 8 + Math.random() * 0.5;
+            const sp = 0.8 + Math.random() * 1.4;
+            particles.push({
+                x: cx, y: cy,
+                vx: Math.cos(a) * sp,
+                vy: Math.sin(a) * sp,
+                born: now,
+                hue: Math.random() < 0.5 ? '#2ecc71' : '#f1c40f'
+            });
+        }
+        floaters.push({ x: cx, y: cy, text: '+1', born: now, color: '#2ecc71' });
     }
 
     function spawnDeathEffect() {
@@ -1180,6 +1322,7 @@
     }
 
     function effectsReset() {
+        particles = [];
         floaters = [];
         deathFlashUntil = 0;
     }
@@ -1214,24 +1357,6 @@
             ctx.lineTo(canvas.width, i * cellSize);
             ctx.stroke();
         }
-
-        // ---------- 食物：带呼吸感，便于一眼找到 ----------
-        const foodCx = food.x * cellSize + cellSize / 2;
-        const foodCy = food.y * cellSize + cellSize / 2;
-        const breathe = 1 + 0.10 * Math.sin(now / 260);
-        const foodColor = isDark ? '#f1c40f' : '#e74c3c';
-        ctx.fillStyle = foodColor;
-        ctx.shadowColor = foodColor;
-        ctx.shadowBlur = 14;
-        ctx.beginPath();
-        ctx.arc(foodCx, foodCy, (cellSize / 2 - 3) * breathe, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        // 中心高光，让食物更立体
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.beginPath();
-        ctx.arc(foodCx - cellSize * 0.11, foodCy - cellSize * 0.11, cellSize * 0.11, 0, 2 * Math.PI);
-        ctx.fill();
 
         // ---------- 蛇身与蛇头共用同一个颜色公式 ----------
         // 身体从尾到头渐亮；蛇头用与"紧邻头的那一节"完全相同的颜色，
@@ -1298,6 +1423,44 @@
             ctx.arc(ex + vec.dx * eyeR * 0.42, ey + vec.dy * eyeR * 0.42, eyeR * 0.52, 0, 2 * Math.PI);
             ctx.fill();
         }
+
+        // ---------- 食物 ----------
+        // 画在**蛇之后**。原来食物画在蛇前面，一旦食物紧邻蛇身，蛇的圆角方块
+        // 加上 shadowBlur 光晕就会把食物盖掉 —— 看起来就是"食物被蛇身覆盖了"。
+        // 玩家在"胜利后继续玩、蛇变长"时最容易撞见（长蛇更容易贴住食物）。
+        const foodCx = food.x * cellSize + cellSize / 2;
+        const foodCy = food.y * cellSize + cellSize / 2;
+        const breathe = 1 + 0.10 * Math.sin(now / 260);
+        const foodR = (cellSize / 2 - 3) * breathe;
+        const foodColor = isDark ? '#f1c40f' : '#e74c3c';
+        // 先描一圈与背景反差大的边：食物紧贴深色蛇身时也能看清轮廓
+        ctx.beginPath();
+        ctx.arc(foodCx, foodCy, foodR + 1.5, 0, 2 * Math.PI);
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.95)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(foodCx, foodCy, foodR, 0, 2 * Math.PI);
+        ctx.fillStyle = foodColor;
+        ctx.shadowColor = foodColor;
+        ctx.shadowBlur = 14;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // 中心高光，让食物更立体
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(foodCx - cellSize * 0.11, foodCy - cellSize * 0.11, cellSize * 0.11, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // ---------- 粒子与上浮文字 ----------
+        for (const p of particles) {
+            const age = (now - p.born) / EFFECT_PARTICLE_LIFE;
+            ctx.globalAlpha = Math.max(0, 1 - age);
+            ctx.fillStyle = p.hue;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.max(0.7, cellSize * 0.11 * (1 - age)), 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
 
         // ---------- 死亡闪屏：叠在蛇之上、结算覆盖层之下 ----------
         if (deathFlashUntil > now) {
@@ -1453,7 +1616,7 @@
 
             ctx.fillStyle = isDark ? '#c9bb92' : '#7d6f4d';
             ctx.font = '15px "Segoe UI", sans-serif';
-            ctx.fillText('要继续玩下去，还是重新开一局？', cx, H / 2 + 128);
+            ctx.fillText('按空格继续玩，或重新开一局', cx, H / 2 + 128);
         }
 
         // ---------- 结束覆盖层 ----------
@@ -1589,8 +1752,9 @@
         winScreenVisible = true;
         winBanner.classList.add('show');
 
-        // 清掉吃食物留下的「+1」上浮文字：它会飘在胜利界面上面，
+        // 清掉吃食物留下的粒子与「+1」上浮文字：它们会飘在胜利界面上面，
         // 像多余的残影（实测奖杯上会叠一个 +1）。
+        particles = [];
         floaters = [];
 
         // 停住游戏，等玩家选择。
@@ -1989,13 +2153,22 @@
         } else {
             document.documentElement.removeAttribute('data-theme');
         }
+        // 按钮说的是"点下去会变成什么"，不是"当前是什么"：
+        // 日间模式点它切到夜间 -> 显示「🌙 切换夜间模式」；夜间模式反过来。
+        // 所以文案要跟着当前主题走，放在 applyTheme 里最稳 ——
+        // 启动读 localStorage、点按钮、以后若有别的入口，都走这一条路径。
+        if (themeBtn) {
+            themeBtn.innerText = (theme === 'dark')
+                ? '🌞️ 切换日间模式'
+                : '🌙 切换夜间模式';
+        }
         // 启动时 applyTheme 会在 initGame 之前被调用，那时 snake 还是空的。
         // drawCanvas 本身已经能安全返回，这里再判一次是为了把意图写明白：
         // 设置主题不必强制重绘，真正需要重绘的是"用户点主题按钮"这条路径。
         if (snake.length) drawCanvas();
     }
 
-    document.getElementById('themeToggle').addEventListener('click', () => {
+    themeBtn.addEventListener('click', () => {
         applyTheme(currentTheme === 'light' ? 'dark' : 'light');
     });
 

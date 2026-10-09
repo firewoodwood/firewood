@@ -39,6 +39,10 @@ globalThis.__g = {
     startNewRoundWithPrompt: () => startNewRoundWithPrompt(),
     beginRound: () => beginRound(),
     clickRestartBtn: () => restartBtn.click(),
+    // 按钮**点击**本身也要测：历史上有过"监听器指向已删元素、bootstrap 被打断"
+    // 的问题，而以前只测了按钮调用的函数（finishRound / togglePause / startAI）。
+    clickEndBtn: () => endBtn.click(),
+    clickPauseBtn: () => pauseBtn.click(),
     clickAiBtn: () => aiBtn.click(),
     // 模拟按空格：派发真实键盘事件，走页面上的 document 监听器
     pressSpace: () => document.dispatchEvent(
@@ -87,6 +91,7 @@ globalThis.__g = {
         lastResult: roundHistory.length ? roundHistory[roundHistory.length - 1] : null,
         roundCount: roundCount,
         roundPending: roundPending,
+        roundInProgress: roundInProgress,
         history: roundHistory.map(h => ({ score: h.score, mode: h.mode, result: h.result,
                                           won: h.won, endedByUser: h.endedByUser }))
     })
@@ -499,6 +504,35 @@ check('未达标的局没有奖杯（手动14分）',
     (texts[3] || '').indexOf('🏆') < 0, texts[3]);
 check('AI 的局即使 400 分也没有奖杯',
     (texts[5] || '').indexOf('🏆') < 0, texts[5]);
+
+console.log('\n=== 9. 工具栏按钮的点击接线 ===');
+// 这一节测的是"按钮点下去有没有反应"，不是按钮调用的函数对不对 ——
+// 函数在别处已经测过；这里防的是"监听器没绑上 / 绑到了已删元素"。
+g.startNewRoundWithPrompt();
+g.beginRound();
+const beforeEndClick = g.state();
+check('点击前处于游玩中', beforeEndClick.gameOver === false && beforeEndClick.roundInProgress === true);
+g.clickEndBtn();
+const afterEndClick = g.state();
+check('点「结束本局」-> gameOver', afterEndClick.gameOver === true,
+    'gameOver=' + afterEndClick.gameOver);
+check('点「结束本局」-> 记了战绩', afterEndClick.history.length === beforeEndClick.history.length + 1,
+    beforeEndClick.history.length + ' -> ' + afterEndClick.history.length);
+check('点「结束本局」-> 标为玩家叫停',
+    !!afterEndClick.lastResult && afterEndClick.lastResult.endedByUser === true);
+
+g.startNewRoundWithPrompt();
+g.beginRound();
+const beforePauseClick = g.state();
+g.clickPauseBtn();
+const afterPauseClick = g.state();
+check('点「暂停」-> paused 翻转', afterPauseClick.paused === !beforePauseClick.paused,
+    beforePauseClick.paused + ' -> ' + afterPauseClick.paused);
+check('点「暂停」-> 按钮文案变「继续」', afterPauseClick.pauseLabel.indexOf('继续') >= 0,
+    afterPauseClick.pauseLabel);
+g.clickPauseBtn();                        // 恢复 -> 进倒计时
+g.fastForwardCountdown();
+check('再点一次 -> 恢复推进', g.state().paused === false);
 
 console.log('\n========================================');
 console.log('  通过 ' + pass + ' 项，失败 ' + fail + ' 项');

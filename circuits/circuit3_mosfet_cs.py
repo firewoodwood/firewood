@@ -37,8 +37,12 @@
     V_DS = VDD − I_D·Rd
     饱和判据：V_DS > V_GS − V_th
     gm   = K·V_OV·(1 + λ·V_DS)
-    ro   = 1/(λ·I_D)
+    gds  = ∂I_D/∂V_DS = λ·½K·V_OV² = λ·I_D/(1 + λ·V_DS)
+    ro   = 1/gds = (1 + λ·V_DS)/(λ·I_D)
     Av   = −gm·(Rd ∥ ro)
+
+  注意 ro：**不能**用教材上那个 ro = 1/(λ·I_D)。它漏掉了上面 gds 里的
+  (1 + λ·V_DS) 因子（等价于把 λ 算两次），本题会让 ro 偏小 8.27%。
 
     （教材常见的 I_D = ½·K·V_OV²、gm = K·V_OV 是忽略 λ 的一阶近似，
       脚本里也一并算出来做对照。）
@@ -126,7 +130,14 @@ def hand_calc():
     # 注意：定出 V_DS 之后，gm 也要跟着带上 (1 + λ·V_DS)
     #   gm = ∂I_D/∂V_GS = K·V_ov·(1 + λ·V_DS)
     gm_exact = K * vov * (1 + LAMBDA * vds_exact)
-    ro_exact = 1.0 / (LAMBDA * id_exact)
+    # 小信号输出电阻：对 V_DS 求导得到 gds，注意**不能**直接用 1/(λ·I_D)。
+    #   I_D = ½K·V_ov²·(1 + λ·V_DS)
+    #   gds = ∂I_D/∂V_DS = ½K·V_ov²·λ = λ·I_D / (1 + λ·V_DS)
+    # 用 1/(λ·I_D) 等于把 λ 算了两次，会漏掉 (1 + λ·V_DS) 这个因子
+    # （本题是 1.0827，即 ro 偏小 8.27%、Av 偏小 0.13%）。
+    base_for_gds = 0.5 * K * vov ** 2          # 不含 λ 的那部分
+    gds_exact = LAMBDA * base_for_gds
+    ro_exact = 1.0 / gds_exact
     rd_par_ro_exact = 1.0 / (1.0 / RD + 1.0 / ro_exact)
     av_exact = -gm_exact * rd_par_ro_exact
 
@@ -134,7 +145,8 @@ def hand_calc():
     id_approx = 0.5 * K * vov ** 2
     vds_approx = VDD - id_approx * RD
     gm_approx = K * vov
-    ro_approx = 1.0 / (LAMBDA * id_approx)
+    # 一阶近似下同样要对 V_DS 求导拿 gds，而不是套 1/(λ·I_D)
+    ro_approx = 1.0 / (LAMBDA * 0.5 * K * vov ** 2)
     rd_par_ro_approx = 1.0 / (1.0 / RD + 1.0 / ro_approx)
     av_approx = -gm_approx * rd_par_ro_approx
 
@@ -202,8 +214,16 @@ def build_common():
     # 不传 l/w：KP 已经把 W/L 折算进去了，再传实例参数会被 ngspice 拒绝。
     c.MOSFET('1', 3, 2, c.gnd, c.gnd, model='NMOS_enh')
 
-    # MOS 的极间寄生电容：Cgs（栅-源）、Cgd（栅-漏，米勒电容）。
+    # MOS 的极间寄生电容：Cgs（栅-源）、Cgd（栅-漏）。
     # 没有它们的话，AC 扫描会是一条平坦的直线、看不到任何高频滚降。
+    #
+    # 关于高频滚降的来源（这里改过一次说法）：**不是** Cgd 的米勒效应。
+    # 本电路的栅极由理想电压源经 100 µF 直接驱动，源阻抗≈0，米勒效应需要
+    # 一个非零的源阻抗才会显现。实测依据：去掉 Cgd 后 100 MHz 内完全没有滚降；
+    # 去掉 Cgs 后 −3 dB 点完全不变（仍是 36.03 MHz）；把源端串上 100 kΩ
+    # （这才真的构成米勒）−3 dB 立刻掉到 0.26 MHz。
+    # 所以这里的滚降是**输出极点** 1/(2π(Rd∥ro)·Cgd) ≈ 20.2 MHz 与
+    # **前馈零点** gm/(2π·Cgd) ≈ 34.5 MHz 共同作用的结果，合起来约 36.2 MHz。
     c.C('gs', 2, c.gnd, CGS @ u_F)
     c.C('gd', 2, 3, CGD @ u_F)
 
@@ -288,7 +308,7 @@ def run_ac():
     # 相位要"展开"：反相放大器的相位落在 −180° 附近，而 np.angle 的值域是
     # (−180°, 180°]，相位穿过 −180° 时会从 −179.9° 跳到 +179.9°，画出来就是
     # 一条竖线 —— 看着像相位突变，其实只是绕圈。展开后才是连续的物理曲线：
-    # 低频 −176° → 中频 −180° → 高频继续朝 −180° 以下走。
+    # 低频约 −179.6°（实测 10 Hz）→ 中频 −180° → 高频继续朝 −180° 以下走。
     phase_deg = np.degrees(np.unwrap(np.angle(vout)))
 
     # 中频增益：取 1 kHz 附近
@@ -360,14 +380,18 @@ def main():
 
     print('\n[4] 小信号参数')
     print('    gm = K·(V_GS − V_th) = %.4f mA/V' % (hc['gm'] * 1e3))
-    print('    ro = 1/(λ·I_D)       = %.4f kΩ' % (hc['ro'] / 1e3))
+    print('    gds = λ·½K·V_ov²     = %.4f µS   （对 V_DS 求导，与 V_DS 无关）'
+          % (LAMBDA * 0.5 * K * hc['vov'] ** 2 * 1e6))
+    print('    ro  = 1/gds          = %.4f kΩ' % (hc['ro'] / 1e3))
     print('    Rd ∥ ro              = %.4f kΩ' % (hc['rd_par_ro'] / 1e3))
     print('    忽略 ro 的近似 Av    = %.4f （与精确值差 %.2f%%）'
           % (hc['av_no_ro'], abs((hc['av_no_ro'] - hc['av']) / hc['av']) * 100))
 
     print('\n[5] 关于 λ 与 ro')
     print('    level-1 模型饱和区电流是 I_D = ½·K·V_ov²·(1 + λ·V_DS)，λ 直接进直流工作点；')
-    print('    AC 小信号里它也照常给出 gds = λ·I_D（即 ro = %.2f kΩ）。' % (hc['ro'] / 1e3))
+    print('    AC 小信号里它照常提供 gds。注意 gds = ∂I_D/∂V_DS = λ·½K·V_ov²，')
+    print('    **不是** λ·I_D —— 后者把 λ 算了两次，会漏掉 (1 + λ·V_DS) 因子，')
+    print('    本题偏小 8.27%%。正确值 ro = %.2f kΩ（不是 115.45 kΩ）。' % (hc['ro'] / 1e3))
     print('    所以 ro 不需要外接电阻来代表 —— 早先版本这么做，是因为模型参数名')
     print('    写成了 lambd，被 ngspice 静默忽略（不报错），实际 λ=0、gds=0。')
     print('    这一点是拿探针实测出来的：固定 Vgs=2V/Vds=4.2V，写 lambd=0.02 与')

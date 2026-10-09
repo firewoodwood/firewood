@@ -2043,7 +2043,10 @@ const EFFECT_FLOATER_LIFE = 900;    // 上浮文字寿命(ms)
     document.addEventListener('keydown', (e) => {
         const key = e.key;
 
-        // 空格：一个键三种含义，按状态分。
+        // 空格：一个键四种含义，按状态分。顺序要紧 —— 越特殊的状态越先判：
+        //   开局提示(开始) -> 胜利界面(继续玩) -> 已结束(重新开始) -> 其余(暂停/恢复)
+        // 胜利界面期间 gameOver 也可能为真，若把 gameOver 判在前面，
+        // 玩家刚拿满 15 分一按空格就会把这一局丢掉。
         // 放在最前面，且不受"AI 接管"影响 —— AI 跑起来之后更需要能随时暂停。
         if (key === ' ' || key === 'Spacebar' || e.code === 'Space') {
             e.preventDefault();
